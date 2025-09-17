@@ -1,89 +1,76 @@
-use rustcore::crypto::signatures::KeyPair;
+use rustcore::crypto::hash::Hash;
+use rustcore::crypto::signature::{PrivateKey, Signature, Verifier};
 
-use ed25519_dalek::{Signer, Verifier};
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
-use ed25519_dalek::{SIGNATURE_LENGTH, PUBLIC_KEY_LENGTH};
+use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 #[test]
-fn keygen_sign_verify_roundtrip_ok() {
-    let kp = KeyPair::generate();
+fn sign_and_verify_ok() {
+    let sk = PrivateKey::new_key();
+    let pk = sk.public_key();
+
     let msg = b"hello blockchain";
+    let h = Hash::new(msg);
 
-    let sig: Signature = kp.sign_message(msg);
+    // firma e verifica attraverso il wrapper
+    let sig = Signature::sign_output(&h, &sk.0);
+    assert!(sig.verify(&h, &pk.0), "la verifica deve riuscire con stessa chiave e stesso hash");
 
-    assert!(kp.verify(msg, &sig), "sign/verify deve riuscire");
-
-    assert_eq!(sig.to_bytes().len(), SIGNATURE_LENGTH);
-    assert_eq!(kp.public_key.to_bytes().len(), PUBLIC_KEY_LENGTH);
+    // sanity sulle lunghezze note di Ed25519
+    assert_eq!(sig.0.to_bytes().len(), SIGNATURE_LENGTH, "firma Ed25519 = 64 byte");
+    assert_eq!(pk.0.to_bytes().len(), PUBLIC_KEY_LENGTH, "pubkey Ed25519 = 32 byte");
 }
 
 #[test]
-fn verify_fails_on_modified_message() {
-    let kp = KeyPair::generate();
-    let msg = b"immutabile";
-    let sig = kp.sign_message(msg);
+fn verify_fails_if_hash_changes() {
+    let sk = PrivateKey::new_key();
+    let pk = sk.public_key();
 
-    // altera 1 byte del messaggio
-    let mut tampered = msg.to_vec();
-    tampered[0] ^= 0x01;
+    let h1 = Hash::new(b"payload A");
+    let h2 = Hash::new(b"payload B"); 
 
-    assert!(!kp.verify(&tampered, &sig), "verifica deve fallire se il messaggio cambia");
+    let sig = Signature::sign_output(&h1, &sk.0);
+    assert!(!sig.verify(&h2, &pk.0), "verifica deve fallire se l'hash cambia");
 }
 
 #[test]
-fn verify_fails_on_modified_signature() {
-    let kp = KeyPair::generate();
-    let msg = b"firmo-questa";
-    let sig = kp.sign_message(msg);
+fn verify_fails_with_wrong_public_key() {
+    let sk1 = PrivateKey::new_key();
+    let pk1 = sk1.public_key();
 
-    // flip di 1 bit nella firma
-    let mut bad = sig.to_bytes();
-    bad[0] ^= 0x01;
-    let bad_sig = Signature::from_bytes(&bad);
-    assert!(!kp.verify(msg, &bad_sig), "verifica deve fallire se la firma cambia");
+    let sk2 = PrivateKey::new_key();
+    let pk2 = sk2.public_key();
+
+    let h = Hash::new(b"same payload");
+
+    let sig = Signature::sign_output(&h, &sk1.0);
+
+    // con la chiave pubblica sbagliata deve fallire
+    assert!(!sig.verify(&h, &pk2.0), "verifica deve fallire con public key diversa");
+    // con quella giusta deve passare (controllo incrociato)
+    assert!(sig.verify(&h, &pk1.0));
 }
 
 #[test]
-fn rfc8032_test1_vector_verify_and_sign() {
-    // RFC 8032 §7.1 - TEST 1 (messaggio vuoto), Ed25519
-    // SECRET KEY (32B seed) e PUBLIC KEY (32B)
-    // https://www.ietf.org/rfc/rfc8032.txt
-    let sk_hex = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60";
-    let pk_hex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
-    let sig_hex =
-        "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155\
-         5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b";
+fn ed25519_is_deterministic_for_same_key_and_message() {
+    let sk = PrivateKey::new_key();
+    let h = Hash::new(b"deterministic message");
 
-    // decode hex -> array
-    use core::convert::TryInto;
-    let sk_bytes: [u8; 32] = hex::decode(sk_hex).unwrap().try_into().unwrap();
-    let pk_bytes: [u8; 32] = hex::decode(pk_hex).unwrap().try_into().unwrap();
-    let sig_bytes: [u8; 64] = hex::decode(sig_hex).unwrap().try_into().unwrap();
-
-    let vk = VerifyingKey::from_bytes(&pk_bytes).expect("pk valida");
-    let sig = Signature::from_bytes(&sig_bytes);
-
-    // messaggio vuoto
-    let msg: &[u8] = b"";
-    assert!(vk.verify(msg, &sig).is_ok(), "RFC8032 TEST1 deve verificare"); 
-
-    // Verifica anche che firmando con la SK di RFC si ottenga la stessa sig
-    let sk = SigningKey::from_bytes(&sk_bytes);
-    let produced = sk.sign(msg);
-    assert_eq!(produced.to_bytes(), sig_bytes, "firma prodotta == firma RFC8032");
+    // Ed25519 (pure) è deterministico: stessa SK + stesso msg -> stessa firma
+    let sig1 = Signature::sign_output(&h, &sk.0);
+    let sig2 = Signature::sign_output(&h, &sk.0);
+    assert_eq!(sig1.0.to_bytes(), sig2.0.to_bytes(), "le firme devono essere identiche");
 }
 
 #[test]
-fn verify_strict_behaviour_matches_verify_on_valid_data() {
-    // Su firme e chiavi "buone" verify_strict deve passare come verify.
-    // (verify_strict aggiunge check anti-malleability non richiesti dall'RFC ma utili nella pratica)
-    // vedi docs ed25519-dalek
-    // https://docs.rs/crate/ed25519-dalek/latest
-    let kp = KeyPair::generate();
-    let msg = b"strict-check";
-    let sig = kp.sign_message(msg);
+fn wrapper_consistency_against_dalek_direct_verify() {
+    let sk = PrivateKey::new_key();
+    let pk = sk.public_key();
 
-    // API strict è su VerifyingKey
-    assert!(kp.public_key.verify(msg, &sig).is_ok());
-    assert!(kp.public_key.verify_strict(msg, &sig).is_ok());
+    let h = Hash::new(b"cross check");
+    let sig = Signature::sign_output(&h, &sk.0);
+
+    // Il nostro verify e quello diretto di dalek devono dare lo stesso esito
+    let ours = sig.verify(&h, &pk.0);
+    let dalek_direct = pk.0.verify(h.as_bytes(), &sig.0).is_ok();
+    assert_eq!(ours, dalek_direct, "wrapper Signature deve essere coerente con dalek");
 }

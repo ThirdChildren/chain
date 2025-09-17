@@ -1,5 +1,5 @@
 pub mod hash;
-pub mod signatures;
+pub mod signature;
 
 pub use hash::Hash;
-pub use signatures::{KeyPair};
+pub use signature::{Signature, PrivateKey, PublicKey};
