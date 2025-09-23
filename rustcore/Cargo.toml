@@ -5,7 +5,11 @@ edition = "2024"
 
 [dependencies]
 "blake3" = "=1.8.2"
-ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
+ciborium = "0.2.2"
+ecdsa = { version = "0.16.9", features = ["signing", "verifying", "serde", "pem"] }
 hex = "0.4.3"
+k256 = { version = "0.13.4", features = ["serde", "pem"] }
 rand = "0.8"
-
+serde = { version = "1.0.226", features = ["derive"] }
+uint = "0.10.0"
+spki = { version = "0.7.3", features = ["pem"] }
