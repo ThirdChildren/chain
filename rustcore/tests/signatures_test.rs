@@ -2,6 +2,8 @@
 
 use rustcore::crypto::hash::Hash;
 use rustcore::crypto::signature::{PrivateKey, PublicKey, Signature};
+use rustcore::util::Saveable;
+use std::io::Cursor;
 
 use ecdsa::signature::Verifier;
 
@@ -71,4 +73,28 @@ fn wrapper_consistency_against_direct_verify() {
     let ours = sig.verify(&h, &pk);
     let direct = pk.0.verify(&h.as_bytes(), &sig.0).is_ok();
     assert_eq!(ours, direct, "wrapper Signature deve essere coerente con ecdsa::Verifier");
+}
+
+#[test]
+fn public_key_pem_roundtrip() {
+    let sk = PrivateKey::new_key();
+    let pk = sk.public_key();
+
+    // salva PEM in memoria
+    let mut buf = Vec::new();
+    pk.save(&mut buf).expect("save PEM");
+
+    // formato atteso
+    assert!(std::str::from_utf8(&buf).unwrap().starts_with("-----BEGIN PUBLIC KEY-----"));
+
+    // ricarica da PEM
+    let loaded = PublicKey::load(Cursor::new(buf)).expect("load PEM");
+
+    // stessa chiave
+    assert_eq!(loaded, pk);
+
+    // verifica che la chiave funzioni dopo il roundtrip
+    let h = Hash::hash(&"pem roundtrip");
+    let sig = Signature::sign_output(&h, &sk);
+    assert!(sig.verify(&h, &loaded));
 }
