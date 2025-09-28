@@ -1,3 +1,4 @@
 /target
 /miner/*.cbor
 /miner/*.pem
+/rustcore/*.cbor
