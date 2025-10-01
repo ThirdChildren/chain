@@ -3,6 +3,13 @@ name = "rustcore"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["secp256k1"]
+secp256k1 = []
+# Future crypto backends can be added here
+# ed25519 = []
+# rsa = []
+
 [dependencies]
 "blake3" = "=1.8.2"
 ciborium = "0.2.2"

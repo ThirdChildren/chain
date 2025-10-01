@@ -1,83 +1,59 @@
 use ecdsa::{
-    Signature as ECDSASignature, SigningKey, VerifyingKey, signature::Signer, signature::Verifier,
+    Signature as ECDSASignature,
 };
 use super::hash::Hash;
+use super::backend::CryptoBackend;
+use super::secp256k1::{Secp256k1Backend, Secp256k1PublicKey, Secp256k1PrivateKey, Secp256k1Signature};
+use super::serialization::{CborFormat, SaveableKey};
 use k256::Secp256k1;
-use k256::elliptic_curve::rand_core::OsRng;
-use serde::{Deserialize, Serialize};
 use spki::EncodePublicKey;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
 use crate::util::Saveable;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Signature(pub ECDSASignature<Secp256k1>);
+// Type aliases for backward compatibility
+pub type PublicKey = Secp256k1PublicKey;
+pub type PrivateKey = Secp256k1PrivateKey;
+pub type Signature = Secp256k1Signature;
 
 impl Signature {
     pub fn new(signature: ECDSASignature<Secp256k1>) -> Self {
-        Signature(signature)
+        Secp256k1Signature(signature)
     }
+    
     pub fn sign_output(output_hash: &Hash, private_key: &PrivateKey) -> Self {
-        let signing_key = &private_key.0;
-        let signature = signing_key.sign(&output_hash.as_bytes());
-        Signature(signature)
+        <Secp256k1Backend as CryptoBackend>::sign(output_hash, private_key)
     }
+    
     pub fn verify(&self, output_hash: &Hash, public_key: &PublicKey) -> bool {
-        public_key
-            .0
-            .verify(&output_hash.as_bytes(), &self.0)
-            .is_ok()
+        <Secp256k1Backend as CryptoBackend>::verify(self, output_hash, public_key)
     }
 }
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub struct PublicKey(pub VerifyingKey<Secp256k1>);
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PrivateKey(#[serde(with = "signkey_serde")] pub SigningKey<Secp256k1>);
 
 impl PrivateKey {
     pub fn new_key() -> Self {
-        PrivateKey(SigningKey::random(&mut OsRng))
+        let keypair = <Secp256k1Backend as CryptoBackend>::generate_keypair();
+        keypair.private_key
     }
+    
     pub fn public_key(&self) -> PublicKey {
-        PublicKey(self.0.verifying_key().clone())
+        <Secp256k1Backend as CryptoBackend>::public_key_from_private(self)
     }
 }
 
-mod signkey_serde {
-    use serde::Deserialize;
-    pub fn serialize<S>(
-        key: &super::SigningKey<super::Secp256k1>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&key.to_bytes())
-    }
-    pub fn deserialize<'de, D>(
-        deserializer: D,
-    ) -> Result<super::SigningKey<super::Secp256k1>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        Ok(super::SigningKey::from_slice(&bytes).unwrap())
-    }
-}
-
+// Implement Saveable for backward compatibility using the new serialization system
 impl Saveable for PrivateKey {
     fn load<I: Read>(reader: I) -> IoResult<Self> {
-        ciborium::de::from_reader(reader)
-            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to deserialize PrivateKey"))
+        let saveable_key: SaveableKey<PrivateKey, CborFormat> = SaveableKey::load(reader)?;
+        Ok(saveable_key.into_key())
     }
+    
     fn save<O: Write>(&self, writer: O) -> IoResult<()> {
-        ciborium::ser::into_writer(self, writer).map_err(|_| {
-            IoError::new(IoErrorKind::InvalidData, "Failed to serialize PrivateKey")
-        })?;
-        Ok(())
+        let saveable_key = SaveableKey::<PrivateKey, CborFormat>::new(self.clone());
+        saveable_key.save(writer)
     }
 }
-// save and load as PEM
+
+// Custom PEM implementation for PublicKey to maintain backward compatibility
 impl Saveable for PublicKey {
     fn load<I: Read>(mut reader: I) -> IoResult<Self> {
         // read PEM-encoded public key into string
@@ -88,8 +64,9 @@ impl Saveable for PublicKey {
         let public_key = buf
             .parse()
             .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to parse PublicKey"))?;
-        Ok(PublicKey(public_key))
+        Ok(Secp256k1PublicKey(public_key))
     }
+    
     fn save<O: Write>(&self, mut writer: O) -> IoResult<()> {
         let s = self
             .0

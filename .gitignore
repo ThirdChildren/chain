@@ -2,3 +2,4 @@
 /miner/*.cbor
 /miner/*.pem
 /rustcore/*.cbor
+/docs
