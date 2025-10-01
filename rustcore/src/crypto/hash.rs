@@ -21,12 +21,10 @@ impl Hash {
         Hash(U256::from_little_endian(&hash_array))
     }
 
-    //check if a hash matches a target
     pub fn matches_target(&self, target: U256) -> bool {
         self.0 <= target
     }
 
-    //zero hash
     pub fn zero() -> Self {
         Hash(U256::zero())
     }

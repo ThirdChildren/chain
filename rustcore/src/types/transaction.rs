@@ -28,7 +28,7 @@ impl Transaction {
     }
 
     pub fn hash(&self) -> Hash {
-        Hash::hash(self)
+        Hash::hash(&self)
     }
 }
 

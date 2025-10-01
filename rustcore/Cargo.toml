@@ -14,3 +14,4 @@ serde = { version = "1.0.226", features = ["derive"] }
 uint = "0.10.0"
 spki = { version = "0.7.3", features = ["pem"] }
 uuid = { version = "1.17.0", features = ["v4", "serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
