@@ -1,8 +1,7 @@
 use crate::crypto::Hash;
-use serde::{Deserialize, Serialize};
 
-/// Trait for cryptographic keys with serialization capabilities
-pub trait CryptoKey: Clone + std::fmt::Debug + Serialize + for<'de> Deserialize<'de> {
+/// Trait for cryptographic keys with basic byte conversion
+pub trait CryptoKey: Clone + std::fmt::Debug {
     /// Convert the key to bytes
     fn to_bytes(&self) -> Vec<u8>;
     
@@ -36,86 +35,8 @@ where
     }
 }
 
-impl<Pub, Priv> Serialize for KeyPair<Pub, Priv>
-where
-    Pub: CryptoKey,
-    Priv: CryptoKey,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("KeyPair", 2)?;
-        state.serialize_field("public_key", &self.public_key)?;
-        state.serialize_field("private_key", &self.private_key)?;
-        state.end()
-    }
-}
-
-impl<'de, Pub, Priv> Deserialize<'de> for KeyPair<Pub, Priv>
-where
-    Pub: CryptoKey,
-    Priv: CryptoKey,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{self, MapAccess, Visitor};
-        use std::fmt;
-
-        struct KeyPairVisitor<Pub, Priv>(std::marker::PhantomData<(Pub, Priv)>);
-
-        impl<'de, Pub, Priv> Visitor<'de> for KeyPairVisitor<Pub, Priv>
-        where
-            Pub: CryptoKey,
-            Priv: CryptoKey,
-        {
-            type Value = KeyPair<Pub, Priv>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct KeyPair")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<KeyPair<Pub, Priv>, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut public_key = None;
-                let mut private_key = None;
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        "public_key" => {
-                            if public_key.is_some() {
-                                return Err(de::Error::duplicate_field("public_key"));
-                            }
-                            public_key = Some(map.next_value()?);
-                        }
-                        "private_key" => {
-                            if private_key.is_some() {
-                                return Err(de::Error::duplicate_field("private_key"));
-                            }
-                            private_key = Some(map.next_value()?);
-                        }
-                        _ => {
-                            let _: serde::de::IgnoredAny = map.next_value()?;
-                        }
-                    }
-                }
-                let public_key = public_key.ok_or_else(|| de::Error::missing_field("public_key"))?;
-                let private_key = private_key.ok_or_else(|| de::Error::missing_field("private_key"))?;
-                Ok(KeyPair::new(public_key, private_key))
-            }
-        }
-
-        const FIELDS: &'static [&'static str] = &["public_key", "private_key"];
-        deserializer.deserialize_struct("KeyPair", FIELDS, KeyPairVisitor(std::marker::PhantomData))
-    }
-}
-
 /// Trait for cryptographic signatures
-pub trait CryptoSignature: Clone + std::fmt::Debug + Serialize + for<'de> Deserialize<'de> {
+pub trait CryptoSignature: Clone + std::fmt::Debug {
     /// Convert the signature to bytes
     fn to_bytes(&self) -> Vec<u8>;
     

@@ -1,7 +1,5 @@
-use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 construct_uint! {
-    #[derive(Serialize, Deserialize)]
     pub struct U256(4);
 }
 //initial reward in bitcoin - multiply by 10^8 to get satoshis

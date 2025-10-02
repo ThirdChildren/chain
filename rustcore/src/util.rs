@@ -1,24 +1,38 @@
 use crate::crypto::Hash;
-use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::{Read, Result as IoResult, Write};
+use std::io::Result as IoResult;
 use std::path::Path;
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MerkleRoot(Hash);
 
+impl MerkleRoot {
+    pub fn new(hash: Hash) -> Self {
+        MerkleRoot(hash)
+    }
+    
+    pub fn hash(&self) -> Hash {
+        self.0
+    }
+    
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.as_bytes()
+    }
+}
+
+// Simplified trait without serialization dependencies
 pub trait Saveable
 where
     Self: Sized,
 {
-    fn load<I: Read>(reader: I) -> IoResult<Self>;
-    fn save<O: Write>(&self, writer: O) -> IoResult<()>;
+    fn to_bytes(&self) -> Vec<u8>;
+    fn from_bytes(bytes: &[u8]) -> IoResult<Self>;
+    
     fn save_to_file<P: AsRef<Path>>(&self, path: P) -> IoResult<()> {
-        let file = File::create(&path)?;
-        self.save(file)
+        std::fs::write(path, self.to_bytes())
     }
+    
     fn load_from_file<P: AsRef<Path>>(path: P) -> IoResult<Self> {
-        let file = File::open(&path)?;
-        Self::load(file)
+        let bytes = std::fs::read(path)?;
+        Self::from_bytes(&bytes)
     }
 }

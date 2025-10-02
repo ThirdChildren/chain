@@ -1,8 +1,6 @@
 use rustcore::crypto::{
     DefaultBackend, DefaultKeyPair, CryptoBackend, CryptoKey, CryptoSignature, Hash,
-    CborFormat, SaveableKey,
 };
-use rustcore::util::Saveable;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔐 Rustcore Crypto System Demo");
@@ -14,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Create some test data to sign
     let test_data = "Hello, blockchain!";
-    let data_hash = Hash::hash(&test_data);
+    let data_hash = Hash::hash(test_data.as_bytes());
     println!("\n📊 Test data: {}", test_data);
     println!("📋 Data hash: {}", data_hash);
     
@@ -28,28 +26,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let is_valid = DefaultBackend::verify(&signature, &data_hash, &keypair.public_key);
     println!("✅ Signature valid: {}", is_valid);
     
-    // Demonstrate serialization
-    println!("\n💾 Testing serialization...");
+    // Demonstrate simple byte operations
+    println!("\n💾 Testing basic operations...");
     
-    // Save private key to CBOR format
-    let saveable_private = SaveableKey::<_, CborFormat>::new(keypair.private_key.clone());
-    let mut private_key_data = Vec::new();
-    saveable_private.save(&mut private_key_data)?;
-    println!("✅ Private key serialized to {} bytes", private_key_data.len());
-    
-    // Load private key back from CBOR
-    let loaded_private: SaveableKey<_, CborFormat> = SaveableKey::load(private_key_data.as_slice())?;
-    println!("✅ Private key deserialized successfully");
-    
-    // Verify the loaded key works
-    let signature2 = DefaultBackend::sign(&data_hash, loaded_private.key());
-    let is_valid2 = DefaultBackend::verify(&signature2, &data_hash, &keypair.public_key);
-    println!("✅ Loaded key signature valid: {}", is_valid2);
+    // Convert keys to bytes (simplified)
+    let private_key_bytes = keypair.private_key.to_bytes();
+    let public_key_bytes = keypair.public_key.to_bytes();
+    println!("✅ Private key serialized to {} bytes", private_key_bytes.len());
     
     // Show key bytes representation
     println!("\n🔑 Key information:");
-    println!("Public key bytes: {} bytes", keypair.public_key.to_bytes().len());
-    println!("Private key bytes: {} bytes", keypair.private_key.to_bytes().len());
+    println!("Public key bytes: {} bytes", public_key_bytes.len());
+    println!("Private key bytes: {} bytes", private_key_bytes.len());
     println!("Signature bytes: {} bytes", signature.to_bytes().len());
     
     Ok(())

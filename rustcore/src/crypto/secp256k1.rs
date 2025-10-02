@@ -6,18 +6,17 @@ use ecdsa::{
 };
 use k256::Secp256k1;
 use k256::elliptic_curve::rand_core::OsRng;
-use serde::{Deserialize, Serialize};
 
 /// ECDSA implementation using secp256k1 curve
 pub struct Secp256k1Backend;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Secp256k1PublicKey(pub VerifyingKey<Secp256k1>);
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Secp256k1PrivateKey(#[serde(with = "signkey_serde")] pub SigningKey<Secp256k1>);
+#[derive(Clone, Debug)]
+pub struct Secp256k1PrivateKey(pub SigningKey<Secp256k1>);
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Secp256k1Signature(pub ECDSASignature<Secp256k1>);
 
 impl CryptoKey for Secp256k1PublicKey {
@@ -82,24 +81,3 @@ impl CryptoBackend for Secp256k1Backend {
     }
 }
 
-mod signkey_serde {
-    use serde::Deserialize;
-    pub fn serialize<S>(
-        key: &super::SigningKey<super::Secp256k1>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&key.to_bytes())
-    }
-    pub fn deserialize<'de, D>(
-        deserializer: D,
-    ) -> Result<super::SigningKey<super::Secp256k1>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        Ok(super::SigningKey::from_slice(&bytes).unwrap())
-    }
-}

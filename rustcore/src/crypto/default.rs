@@ -11,4 +11,3 @@ pub type DefaultKeyPair = super::backend::KeyPair<DefaultPublicKey, DefaultPriva
 // pub use super::ed25519::{Ed25519Backend as DefaultBackend, ...};
 
 pub use super::backend::CryptoBackend;
-pub use super::serialization::{SerializationFormat, CborFormat, PemFormat, SaveableKey};

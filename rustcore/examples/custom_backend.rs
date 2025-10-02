@@ -2,18 +2,17 @@
 // Note: This is a simplified mock implementation for demonstration purposes
 
 use rustcore::crypto::{CryptoBackend, CryptoKey, CryptoSignature, KeyPair, Hash};
-use serde::{Deserialize, Serialize};
 
 // Mock Ed25519 implementation (simplified for demo)
 pub struct Ed25519Backend;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ed25519PublicKey(pub [u8; 32]);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Ed25519PrivateKey(pub [u8; 32]);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Ed25519Signature(pub Vec<u8>);
 
 impl Ed25519Signature {
@@ -132,7 +131,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Test data
     let test_data = "Test data for Ed25519";
-    let data_hash = Hash::hash(&test_data);
+    let data_hash = Hash::hash(test_data.as_bytes());
     println!("\n📊 Test data: {}", test_data);
     
     // Sign with Ed25519

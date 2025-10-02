@@ -1,15 +1,13 @@
-use super::{Transaction, TxOutput};
+use super::Transaction;
 use crate::U256;
 //use crate::error::{BtcError, Result};
 use crate::crypto::Hash;
 use crate::util::MerkleRoot;
 use crate::util::Saveable;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockHeader {
     pub merkle_root: MerkleRoot,
     pub prev_block_hash: Hash,
@@ -35,12 +33,16 @@ impl BlockHeader {
         }
     }
 
+    pub fn to_bytes(&self) -> Vec<u8> {
+        format!("{:?}", self).into_bytes()
+    }
+    
     pub fn hash(&self) -> Hash {
-        Hash::hash(&self)
+        Hash::hash(&self.to_bytes())
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<Transaction>,
@@ -50,20 +52,27 @@ impl Block {
     pub fn new (header: BlockHeader, transactions: Vec<Transaction>) -> Self {
         Block { header, transactions }
     }
+    
+    pub fn to_bytes(&self) -> Vec<u8> {
+        format!("{:?}", self).into_bytes()
+    }
+    
     pub fn hash(&self) -> Hash {
-        Hash::hash(&self)
+        Hash::hash(&self.to_bytes())
     }
 }
 
 
 impl Saveable for Block {
-    fn load<I: Read>(reader: I) -> IoResult<Self> {
-        ciborium::de::from_reader(reader)
-            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to deserialize Block"))
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes()
     }
-
-    fn save<O: Write>(&self, writer: O) -> IoResult<()> {
-        ciborium::ser::into_writer(self, writer)
-            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "Failed to serialize Block"))
+    
+    fn from_bytes(_bytes: &[u8]) -> IoResult<Self> {
+        // Simple deserialization - in a real implementation you'd use a proper format
+        Err(IoError::new(
+            IoErrorKind::InvalidData,
+            "Block deserialization not implemented in simplified version",
+        ))
     }
 }
