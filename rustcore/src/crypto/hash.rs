@@ -13,6 +13,11 @@ impl Hash {
         Hash(U256::from_little_endian(&hash_array))
     }
     
+    /// Create a hash from a 32-byte array directly (for transaction IDs)
+    pub fn from_bytes_array(bytes: [u8; 32]) -> Self {
+        Hash(U256::from_little_endian(&bytes))
+    }
+    
     /// Create a hash from a U256 value directly
     pub fn from_u256(value: U256) -> Self {
         Hash(value)
