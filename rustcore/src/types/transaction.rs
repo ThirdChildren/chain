@@ -1,7 +1,4 @@
 use crate::crypto::{PublicKey, Signature, Hash};
-use crate::util::Saveable;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult};
-use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -11,14 +8,15 @@ pub struct Transaction {
 
 #[derive(Clone, Debug)]
 pub struct TxInput {
-    pub prev_tx_out_hash: Hash,
+    pub previous_tx_id: [u8; 32],
+    pub output_index: u32,
     pub signature: Signature,
+    pub public_key: PublicKey,
 }
 #[derive(Clone, Debug)]
 pub struct TxOutput {
-    pub value: u64,
-    pub unique_id: Uuid,
-    pub pub_key: PublicKey,
+    pub amount: u64,
+    pub recipient: [u8; 20],
 }
 
 impl Transaction {
@@ -35,16 +33,3 @@ impl Transaction {
     }
 }
 
-impl Saveable for Transaction {
-    fn to_bytes(&self) -> Vec<u8> {
-        self.to_bytes()
-    }
-    
-    fn from_bytes(_bytes: &[u8]) -> IoResult<Self> {
-        // Simple deserialization - in a real implementation you'd use a proper format
-        Err(IoError::new(
-            IoErrorKind::InvalidData,
-            "Transaction deserialization not implemented in simplified version",
-        ))
-    }
-}
