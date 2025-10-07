@@ -66,36 +66,58 @@ impl Transaction {
         bytes
     }
     
-    /// Hash della transazione
-    pub fn hash(&self) -> Hash {
-        Hash::hash(&self.to_bytes())
+    /// Hash della transazione usando Hasher incrementale (più efficiente)
+    pub fn hash_with_hasher(&self) -> Hash {
+        Hash::hash_with_hasher(|hasher| {
+            // Numero di inputs
+            hasher.update_u32_le(self.inputs.len() as u32);
+            
+            // Serializza ogni input
+            for input in &self.inputs {
+                hasher.update(&input.previous_tx_id);
+                hasher.update_u32_le(input.output_index);
+                hasher.update(&input.public_key.to_bytes());
+            }
+            
+            // Numero di outputs
+            hasher.update_u32_le(self.outputs.len() as u32);
+            
+            // Serializza ogni output
+            for output in &self.outputs {
+                hasher.update_u64_le(output.amount);
+                hasher.update(&output.recipient);
+            }
+        })
     }
     
-    /// Crea hash per la firma di un input specifico
+    /// Hash della transazione 
+    pub fn hash(&self) -> Hash {
+        self.hash_with_hasher()
+    }
+    
+    /// Crea hash per la firma di un input specifico usando Hasher incrementale
     pub fn signature_hash(&self, input_index: usize) -> Hash {
-        let mut bytes = Vec::new();
-        
-        // Include tutti i dati tranne le firme
-        bytes.extend_from_slice(&(self.inputs.len() as u32).to_le_bytes());
-        
-        for (i, input) in self.inputs.iter().enumerate() {
-            bytes.extend_from_slice(&input.previous_tx_id);
-            bytes.extend_from_slice(&input.output_index.to_le_bytes());
+        Hash::hash_with_hasher(|hasher| {
+            // Include tutti i dati tranne le firme
+            hasher.update_u32_le(self.inputs.len() as u32);
             
-            // Include la chiave pubblica solo per l'input che stiamo firmando
-            if i == input_index {
-                bytes.extend_from_slice(&input.public_key.to_bytes());
+            for (i, input) in self.inputs.iter().enumerate() {
+                hasher.update(&input.previous_tx_id);
+                hasher.update_u32_le(input.output_index);
+                
+                // Include la chiave pubblica solo per l'input che stiamo firmando
+                if i == input_index {
+                    hasher.update(&input.public_key.to_bytes());
+                }
             }
-        }
-        
-        // Include tutti gli outputs
-        bytes.extend_from_slice(&(self.outputs.len() as u32).to_le_bytes());
-        for output in &self.outputs {
-            bytes.extend_from_slice(&output.amount.to_le_bytes());
-            bytes.extend_from_slice(&output.recipient);
-        }
-        
-        Hash::hash(&bytes)
+            
+            // Include tutti gli outputs
+            hasher.update_u32_le(self.outputs.len() as u32);
+            for output in &self.outputs {
+                hasher.update_u64_le(output.amount);
+                hasher.update(&output.recipient);
+            }
+        })
     }
     
     /// Firma un input specifico
@@ -187,9 +209,19 @@ impl Transaction {
         Ok(())
     }
     
-    /// Converte una chiave pubblica in un address (20 bytes)
+    /// Converte una chiave pubblica in un address (20 bytes) usando Hasher
     pub fn public_key_to_address(public_key: &PublicKey) -> [u8; 20] {
         let hash = Hash::hash(&public_key.to_bytes());
+        let mut address = [0u8; 20];
+        address.copy_from_slice(&hash.as_bytes()[0..20]);
+        address
+    }
+    
+    /// Versione alternativa con Hasher per compatibilità
+    pub fn public_key_to_address_with_hasher(public_key: &PublicKey) -> [u8; 20] {
+        let hash = Hash::hash_with_hasher(|hasher| {
+            hasher.update(&public_key.to_bytes());
+        });
         let mut address = [0u8; 20];
         address.copy_from_slice(&hash.as_bytes()[0..20]);
         address

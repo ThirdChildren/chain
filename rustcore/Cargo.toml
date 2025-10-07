@@ -22,3 +22,7 @@ uuid = { version = "1.17.0", features = ["v4"] }
 [[example]]
 name = "transaction_validation"
 path = "examples/transaction_validation.rs"
+
+[[example]]
+name = "hasher_demo"
+path = "examples/hasher_demo.rs"
