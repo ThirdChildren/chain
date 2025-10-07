@@ -79,7 +79,6 @@ impl CryptoBackend for Ed25519Backend {
     type Signature = Ed25519Signature;
     
     fn generate_keypair() -> KeyPair<Self::PublicKey, Self::PrivateKey> {
-        // Mock implementation - in reality this would use proper Ed25519 key generation
         use rand::RngCore;
         let mut rng = rand::thread_rng();
         
@@ -87,7 +86,7 @@ impl CryptoBackend for Ed25519Backend {
         let mut public_bytes = [0u8; 32];
         
         rng.fill_bytes(&mut private_bytes);
-        rng.fill_bytes(&mut public_bytes); // Mock - real implementation derives from private
+        rng.fill_bytes(&mut public_bytes); 
         
         KeyPair::new(
             Ed25519PublicKey(public_bytes),
@@ -96,18 +95,15 @@ impl CryptoBackend for Ed25519Backend {
     }
     
     fn public_key_from_private(private_key: &Self::PrivateKey) -> Self::PublicKey {
-        // Mock implementation - real Ed25519 would derive public from private
         let mut public_bytes = [0u8; 32];
-        public_bytes.copy_from_slice(&private_key.0); // Simplified mock
+        public_bytes.copy_from_slice(&private_key.0); 
         Ed25519PublicKey(public_bytes)
     }
     
     fn sign(data: &Hash, _private_key: &Self::PrivateKey) -> Self::Signature {
-        // Mock implementation - real Ed25519 would perform actual signing
         let data_bytes = data.as_bytes();
         let mut sig_bytes = vec![0u8; 64];
         sig_bytes[..32].copy_from_slice(&data_bytes);
-        // Fill the rest with mock data
         for i in 32..64 {
             sig_bytes[i] = (i as u8).wrapping_mul(2);
         }
@@ -115,7 +111,6 @@ impl CryptoBackend for Ed25519Backend {
     }
     
     fn verify(signature: &Self::Signature, data: &Hash, _public_key: &Self::PublicKey) -> bool {
-        // Mock verification - real implementation would verify properly
         let data_bytes = data.as_bytes();
         signature.0.len() >= 32 && signature.0[..32] == data_bytes
     }

@@ -5,19 +5,23 @@ edition = "2024"
 
 [features]
 default = ["secp256k1"]
-secp256k1 = []
+secp256k1 = ["dep:k256", "dep:ecdsa"]
 # Future crypto backends can be added here
-# ed25519 = []
-# rsa = []
+# ed25519 = ["dep:ed25519-dalek"]
+# rsa = ["dep:rsa"]
 
 [dependencies]
 "blake3" = "=1.8.2"
-ecdsa = { version = "0.16.9", features = ["signing", "verifying"] }
 hex = "0.4.3"
-k256 = { version = "0.13.4" }
 rand = "0.8"
 uint = "0.10.0"
 uuid = { version = "1.17.0", features = ["v4"] }
+
+# Crypto backends (feature-gated)
+ecdsa = { version = "0.16.9", features = ["signing", "verifying"], optional = true }
+k256 = { version = "0.13.4", optional = true }
+# ed25519-dalek = { version = "2.0", optional = true }
+# rsa = { version = "0.9", optional = true }
 
 [[example]]
 name = "transaction_validation"

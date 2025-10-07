@@ -10,4 +10,9 @@ pub type DefaultKeyPair = super::backend::KeyPair<DefaultPublicKey, DefaultPriva
 // #[cfg(feature = "ed25519")]
 // pub use super::ed25519::{Ed25519Backend as DefaultBackend, ...};
 
+// Fallback al secp256k1 se nessuna feature specifica è attiva
+// (questo dovrebbe raramente accadere dato che secp256k1 è nel default)
+#[cfg(not(any(feature = "secp256k1")))]
+compile_error!("Almeno un backend crittografico deve essere abilitato. Abilita 'secp256k1' o un altro backend.");
+
 pub use super::backend::CryptoBackend;
