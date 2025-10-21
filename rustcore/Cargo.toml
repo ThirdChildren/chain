@@ -27,6 +27,3 @@ k256 = { version = "0.13.4", optional = true }
 name = "transaction_validation"
 path = "examples/transaction_validation.rs"
 
-[[example]]
-name = "hasher_demo"
-path = "examples/hasher_demo.rs"

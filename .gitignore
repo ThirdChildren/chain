@@ -3,3 +3,4 @@
 /miner/*.pem
 /rustcore/*.cbor
 /docs
+/.zed

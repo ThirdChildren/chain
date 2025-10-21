@@ -4,7 +4,6 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Hash(U256);
 
-/// Blake3 Hasher wrapper per hashing incrementale
 pub struct Hasher {
     inner: blake3::Hasher,
 }
@@ -16,52 +15,46 @@ impl Default for Hasher {
 }
 
 impl Hasher {
-    /// Crea un nuovo hasher Blake3
     pub fn new() -> Self {
         Self {
             inner: blake3::Hasher::new(),
         }
     }
     
-    /// Crea un hasher con una chiave personalizzata (per HMAC-like)
+    /// Create a hasher with a custom key (for HMAC-like usage)
     pub fn new_keyed(key: &[u8; 32]) -> Self {
         Self {
             inner: blake3::Hasher::new_keyed(key),
         }
     }
     
-    /// Crea un hasher per key derivation
+    /// Create a hasher for key derivation
     pub fn new_derive_key(context: &str) -> Self {
         Self {
             inner: blake3::Hasher::new_derive_key(context),
         }
     }
     
-    /// Aggiunge dati all'hasher
     pub fn update(&mut self, data: &[u8]) -> &mut Self {
         self.inner.update(data);
         self
     }
     
-    /// Aggiunge un singolo byte
     pub fn update_byte(&mut self, byte: u8) -> &mut Self {
         self.inner.update(&[byte]);
         self
     }
     
-    /// Aggiunge un u32 in little-endian
     pub fn update_u32_le(&mut self, value: u32) -> &mut Self {
         self.inner.update(&value.to_le_bytes());
         self
     }
     
-    /// Aggiunge un u64 in little-endian
     pub fn update_u64_le(&mut self, value: u64) -> &mut Self {
         self.inner.update(&value.to_le_bytes());
         self
     }
     
-    /// Finalizza l'hash e restituisce il risultato
     pub fn finalize(self) -> Hash {
         let hash = self.inner.finalize();
         let hash_bytes = hash.as_bytes();
@@ -69,27 +62,17 @@ impl Hasher {
         Hash(U256::from_little_endian(&hash_array))
     }
     
-    /// Finalizza e restituisce i bytes grezzi
     pub fn finalize_bytes(self) -> [u8; 32] {
         let hash = self.inner.finalize();
         *hash.as_bytes()
     }
     
-    /// Reset dell'hasher per riutilizzo
     pub fn reset(&mut self) {
         self.inner.reset();
     }
 }
 
 impl Hash {
-    /// Create a hash from raw bytes
-    pub fn from_bytes(data: &[u8]) -> Self {
-        let hash = blake3::hash(data);
-        let hash_bytes = hash.as_bytes();
-        let hash_array: [u8; 32] = hash_bytes.as_slice().try_into().unwrap();
-        Hash(U256::from_little_endian(&hash_array))
-    }
-    
     /// Create a hash from a 32-byte array directly (for transaction IDs)
     pub fn from_bytes_array(bytes: [u8; 32]) -> Self {
         Hash(U256::from_little_endian(&bytes))
@@ -122,14 +105,15 @@ impl Hash {
         bytes.as_slice().try_into().unwrap()
     }
     
-    /// Simple hash method for basic compatibility
-    /// For structured data, consider using a proper serialization method first
+    /// Hash function base
     pub fn hash(data: &[u8]) -> Self {
-        Self::from_bytes(data)
+        let mut hasher = Hasher::new();
+        hasher.update(data);
+        hasher.finalize()
     }
     
-    /// Hash incrementale usando l'Hasher per dati complessi
-    pub fn hash_with_hasher<F>(builder: F) -> Self 
+    /// Hash with builder closure
+    pub fn compute<F>(builder: F) -> Self 
     where 
         F: FnOnce(&mut Hasher),
     {
@@ -138,8 +122,8 @@ impl Hash {
         hasher.finalize()
     }
     
-    /// Hash di dati multipli 
-    pub fn hash_multiple(data_parts: &[&[u8]]) -> Self {
+    /// Hash of multiple data 
+    pub fn hash_parts(data_parts: &[&[u8]]) -> Self {
         let mut hasher = Hasher::new();
         for part in data_parts {
             hasher.update(part);
@@ -172,13 +156,13 @@ mod tests {
     
     #[test]
     fn test_hasher_with_builder() {
-        let hash1 = Hash::hash_with_hasher(|hasher| {
+        let hash1 = Hash::compute(|hasher| {
             hasher.update(b"test");
             hasher.update_u32_le(42);
             hasher.update_u64_le(1234567890);
         });
         
-        let hash2 = Hash::hash_with_hasher(|hasher| {
+        let hash2 = Hash::compute(|hasher| {
             hasher.update(b"test");
             hasher.update_u32_le(42);
             hasher.update_u64_le(1234567890);
@@ -190,9 +174,9 @@ mod tests {
     #[test]
     fn test_hasher_multiple_data() {
         let data_parts: &[&[u8]] = &[b"part1", b"part2", b"part3"];
-        let hash1 = Hash::hash_multiple(data_parts);
+        let hash1 = Hash::hash_parts(data_parts);
         
-        let hash2 = Hash::hash_with_hasher(|hasher| {
+        let hash2 = Hash::compute(|hasher| {
             for part in data_parts {
                 hasher.update(part);
             }
@@ -214,7 +198,6 @@ mod tests {
         
         assert_eq!(hash1, hash2);
         
-        // Hash con chiave diversa dovrebbe essere diverso
         let different_key = [24u8; 32];
         let mut hasher3 = Hasher::new_keyed(&different_key);
         hasher3.update(b"authenticated data");
@@ -235,7 +218,6 @@ mod tests {
         
         assert_eq!(derived1, derived2);
         
-        // Contesto diverso dovrebbe produrre chiave diversa
         let mut hasher3 = Hasher::new_derive_key("context2");
         hasher3.update(b"input data");
         let derived3 = hasher3.finalize();
@@ -260,13 +242,12 @@ mod tests {
     
     #[test]
     fn test_hasher_number_methods() {
-        let hash1 = Hash::hash_with_hasher(|hasher| {
+        let hash1 = Hash::compute(|hasher| {
             hasher.update_byte(0xFF);
             hasher.update_u32_le(0x12345678);
             hasher.update_u64_le(0x123456789ABCDEF0);
         });
         
-        // Manuale equivalente
         let mut data = Vec::new();
         data.push(0xFF);
         data.extend_from_slice(&0x12345678u32.to_le_bytes());
@@ -278,12 +259,11 @@ mod tests {
     
     #[test]
     fn test_hash_deterministic() {
-        // Verifica che l'hashing sia sempre deterministico
         let data = b"deterministic test data";
         
         let hash1 = Hash::hash(data);
         let hash2 = Hash::hash(data);
-        let hash3 = Hash::hash_with_hasher(|hasher| { hasher.update(data); });
+        let hash3 = Hash::compute(|hasher| { hasher.update(data); });
         
         assert_eq!(hash1, hash2);
         assert_eq!(hash1, hash3);

@@ -22,7 +22,6 @@ pub struct TxOutput {
     pub recipient: [u8; 20],
 }
 
-// UTXO Set per prevenire doppia spesa
 pub type UTXOSet = HashMap<(Hash, u32), TxOutput>;
 
 #[derive(Debug)]
@@ -40,21 +39,19 @@ impl Transaction {
         Transaction { inputs, outputs }
     }
 
-    /// Serializzazione semplice senza librerie esterne
+    /// Serialization without external libraries
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        
-        // Numero di inputs
+
         bytes.extend_from_slice(&(self.inputs.len() as u32).to_le_bytes());
-        
-        // Serializza ogni input
+
+        // Serialize each input
         for input in &self.inputs {
             bytes.extend_from_slice(&input.previous_tx_id);
             bytes.extend_from_slice(&input.output_index.to_le_bytes());
             bytes.extend_from_slice(&input.public_key.to_bytes());
         }
         
-        // Numero di outputs
         bytes.extend_from_slice(&(self.outputs.len() as u32).to_le_bytes());
         
         // Serializza ogni output
@@ -66,52 +63,40 @@ impl Transaction {
         bytes
     }
     
-    /// Hash della transazione usando Hasher incrementale (più efficiente)
-    pub fn hash_with_hasher(&self) -> Hash {
-        Hash::hash_with_hasher(|hasher| {
-            // Numero di inputs
+    /// Trabsaction hash
+    pub fn hash(&self) -> Hash {
+        Hash::compute(|hasher| {
             hasher.update_u32_le(self.inputs.len() as u32);
             
-            // Serializza ogni input
             for input in &self.inputs {
                 hasher.update(&input.previous_tx_id);
                 hasher.update_u32_le(input.output_index);
                 hasher.update(&input.public_key.to_bytes());
             }
             
-            // Numero di outputs
             hasher.update_u32_le(self.outputs.len() as u32);
             
-            // Serializza ogni output
             for output in &self.outputs {
                 hasher.update_u64_le(output.amount);
                 hasher.update(&output.recipient);
             }
         })
     }
-    
-    /// Hash della transazione 
-    pub fn hash(&self) -> Hash {
-        self.hash_with_hasher()
-    }
-    
-    /// Crea hash per la firma di un input specifico usando Hasher incrementale
+
+    /// Create a hash for signing a specific input
     pub fn signature_hash(&self, input_index: usize) -> Hash {
-        Hash::hash_with_hasher(|hasher| {
-            // Include tutti i dati tranne le firme
+        Hash::compute(|hasher| {
             hasher.update_u32_le(self.inputs.len() as u32);
             
             for (i, input) in self.inputs.iter().enumerate() {
                 hasher.update(&input.previous_tx_id);
                 hasher.update_u32_le(input.output_index);
                 
-                // Include la chiave pubblica solo per l'input che stiamo firmando
                 if i == input_index {
                     hasher.update(&input.public_key.to_bytes());
                 }
             }
             
-            // Include tutti gli outputs
             hasher.update_u32_le(self.outputs.len() as u32);
             for output in &self.outputs {
                 hasher.update_u64_le(output.amount);
@@ -119,8 +104,8 @@ impl Transaction {
             }
         })
     }
-    
-    /// Firma un input specifico
+
+    /// Sign a specific input
     pub fn sign_input(&mut self, input_index: usize, private_key: &PrivateKey) -> Result<(), ValidationError> {
         if input_index >= self.inputs.len() {
             return Err(ValidationError::InputNotFound);
@@ -134,31 +119,30 @@ impl Transaction {
         
         Ok(())
     }
-    
-    /// Valida una singola transazione
+
+    /// Validate a single transaction
     pub fn validate(&self, utxo_set: &UTXOSet) -> Result<(), ValidationError> {
-        // Controlli di base
         if self.inputs.is_empty() || self.outputs.is_empty() {
             return Err(ValidationError::EmptyTransaction);
         }
         
         let mut total_input_amount = 0u64;
         let mut total_output_amount = 0u64;
-        
-        // Valida ogni input
+
+        // Validate each input
         for (i, input) in self.inputs.iter().enumerate() {
-            // Controlla se l'UTXO esiste
+            // Check if the UTXO exists
             let utxo_key = (Hash::from_bytes_array(input.previous_tx_id), input.output_index);
             let referenced_output = utxo_set.get(&utxo_key)
                 .ok_or(ValidationError::InputNotFound)?;
             
-            // Verifica che il recipient dell'output precedente corrisponda alla chiave pubblica
+            // Check that the recipient of the previous output matches the public key
             let public_key_hash = Self::public_key_to_address(&input.public_key);
             if public_key_hash != referenced_output.recipient {
                 return Err(ValidationError::InvalidSignature);
             }
-            
-            // Verifica la firma
+
+            // Check the signature
             let sig_hash = self.signature_hash(i);
             if !input.signature.verify(&sig_hash, &input.public_key) {
                 return Err(ValidationError::InvalidSignature);
@@ -168,7 +152,6 @@ impl Transaction {
                 .ok_or(ValidationError::InvalidAmount)?;
         }
         
-        // Calcola il totale degli output
         for output in &self.outputs {
             if output.amount == 0 {
                 return Err(ValidationError::InvalidAmount);
@@ -177,22 +160,20 @@ impl Transaction {
                 .ok_or(ValidationError::InvalidAmount)?;
         }
         
-        // Verifica che input >= output (le fee vanno al miner)
+        // Check that input >= output (fees go to the miner)
         if total_input_amount < total_output_amount {
             return Err(ValidationError::InsufficientFunds);
         }
         
         Ok(())
     }
-    
-    /// Applica la transazione all'UTXO set (rimuove input, aggiunge output)
+
+    /// Apply the transaction to the UTXO set (remove inputs, add outputs)
     pub fn apply_to_utxo_set(&self, utxo_set: &mut UTXOSet) -> Result<(), ValidationError> {
-        // Prima valida la transazione
         self.validate(utxo_set)?;
         
         let tx_hash = self.hash();
         
-        // Rimuovi gli UTXO spesi
         for input in &self.inputs {
             let utxo_key = (Hash::from_bytes_array(input.previous_tx_id), input.output_index);
             if utxo_set.remove(&utxo_key).is_none() {
@@ -200,7 +181,6 @@ impl Transaction {
             }
         }
         
-        // Aggiungi i nuovi UTXO
         for (index, output) in self.outputs.iter().enumerate() {
             let utxo_key = (tx_hash, index as u32);
             utxo_set.insert(utxo_key, output.clone());
@@ -209,17 +189,9 @@ impl Transaction {
         Ok(())
     }
     
-    /// Converte una chiave pubblica in un address (20 bytes) usando Hasher
-    pub fn public_key_to_address(public_key: &PublicKey) -> [u8; 20] {
-        let hash = Hash::hash(&public_key.to_bytes());
-        let mut address = [0u8; 20];
-        address.copy_from_slice(&hash.as_bytes()[0..20]);
-        address
-    }
     
-    /// Versione alternativa con Hasher per compatibilità
-    pub fn public_key_to_address_with_hasher(public_key: &PublicKey) -> [u8; 20] {
-        let hash = Hash::hash_with_hasher(|hasher| {
+    pub fn public_key_to_address(public_key: &PublicKey) -> [u8; 20] {
+        let hash = Hash::compute(|hasher| {
             hasher.update(&public_key.to_bytes());
         });
         let mut address = [0u8; 20];
@@ -227,7 +199,7 @@ impl Transaction {
         address
     }
     
-    /// Calcola le fee della transazione
+    /// Calculate transaction fee
     pub fn calculate_fee(&self, utxo_set: &UTXOSet) -> Result<u64, ValidationError> {
         let mut total_input = 0u64;
         let mut total_output = 0u64;
