@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 default = ["secp256k1"]
 secp256k1 = ["dep:k256", "dep:ecdsa"]
+mldsa = ["dep:pqcrypto-dilithium", "dep:pqcrypto-traits"]
 # Future crypto backends can be added here
 # ed25519 = ["dep:ed25519-dalek"]
 # rsa = ["dep:rsa"]
@@ -20,6 +21,8 @@ uuid = { version = "1.17.0", features = ["v4"] }
 # Crypto backends (feature-gated)
 ecdsa = { version = "0.16.9", features = ["signing", "verifying"], optional = true }
 k256 = { version = "0.13.4", optional = true }
+pqcrypto-dilithium = { version = "0.5", optional = true }
+pqcrypto-traits = { version = "0.3", optional = true }
 # ed25519-dalek = { version = "2.0", optional = true }
 # rsa = { version = "0.9", optional = true }
 
