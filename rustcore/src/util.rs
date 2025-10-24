@@ -19,7 +19,6 @@ impl MerkleRoot {
     }
 }
 
-// Simplified trait without serialization dependencies
 pub trait Saveable
 where
     Self: Sized,

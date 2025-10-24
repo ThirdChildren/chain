@@ -9,7 +9,6 @@ fn main() {
     let public_key_file = name.clone() + ".pub.bytes";
     let private_key_file = name + ".priv.bytes";
     
-    // Salva le chiavi come bytes semplici
     fs::write(&private_key_file, private_key.to_bytes()).unwrap();
     fs::write(&public_key_file, public_key.to_bytes()).unwrap();
     

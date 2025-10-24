@@ -14,9 +14,9 @@ fn main() -> Result<(), ValidationError> {
     let bob_public = bob_private.public_key();
     let bob_address = Transaction::public_key_to_address(&bob_public);
     
-    println!("👤 Alice address: {:02x?}", &alice_address[..8]);
-    println!("👤 Bob address: {:02x?}", &bob_address[..8]);
-    
+    println!("Alice address: {:02x?}", &alice_address[..8]);
+    println!("Bob address: {:02x?}", &bob_address[..8]);
+
     // 2. Creiamo un UTXO set iniziale (Alice ha 100 monete)
     let mut utxo_set = UTXOSet::new();
     
@@ -28,8 +28,8 @@ fn main() -> Result<(), ValidationError> {
     };
     utxo_set.insert((genesis_tx_hash, 0), initial_output);
     
-    println!("\n💰 UTXO iniziale: Alice ha 100 monete");
-    println!("📊 UTXO Set size: {}", utxo_set.len());
+    println!("\nUTXO iniziale: Alice ha 100 monete");
+    println!("UTXO Set size: {}", utxo_set.len());
     
     // 3. Alice crea una transazione per inviare 50 monete a Bob
     // Creiamo una firma dummy temporanea
@@ -57,51 +57,51 @@ fn main() -> Result<(), ValidationError> {
         vec![input],
         vec![output_to_bob, change_to_alice],
     );
-    
-    println!("\n📋 Transazione creata:");
-    println!("   🔄 Input: {} monete da Alice", 100);
-    println!("   📤 Output 1: {} monete a Bob", 50);
-    println!("   📤 Output 2: {} monete (change) ad Alice", 45);
-    println!("   💸 Fee: {} monete", 5);
+
+    println!("\nTransazione creata:");
+    println!("   Input: {} monete da Alice", 100);
+    println!("   Output 1: {} monete a Bob", 50);
+    println!("   Output 2: {} monete (change) ad Alice", 45);
+    println!("   Fee: {} monete", 5);
     
     // 4. Alice firma la transazione
-    println!("\n✍️  Alice firma la transazione...");
+    println!("\nAlice firma la transazione...");
     transaction.sign_input(0, &alice_private)?;
-    println!("✅ Transazione firmata!");
+    println!("Transazione firmata!");
     
     // 5. Calcoliamo le fee
     let fee = transaction.calculate_fee(&utxo_set)?;
-    println!("💰 Fee calcolata: {} monete", fee);
+    println!("Fee calcolata: {} monete", fee);
     
     // 6. Validazione della transazione
-    println!("\n🔍 Validazione della transazione...");
+    println!("\nValidazione della transazione...");
     
     match transaction.validate(&utxo_set) {
         Ok(()) => {
-            println!("✅ Transazione valida!");
-            
+            println!("Transazione valida!");
+
             // 7. Applichiamo la transazione all'UTXO set
-            println!("\n📦 Applicazione al UTXO set...");
+            println!("\nApplicazione al UTXO set...");
             transaction.apply_to_utxo_set(&mut utxo_set)?;
-            
-            println!("✅ Transazione applicata con successo!");
-            println!("📊 Nuovo UTXO Set size: {}", utxo_set.len());
-            
+
+            println!("Transazione applicata con successo!");
+            println!("Nuovo UTXO Set size: {}", utxo_set.len());
+
             // Mostriamo i nuovi UTXO
             let tx_hash = transaction.hash();
-            println!("\n💎 Nuovi UTXO creati:");
-            println!("   🆔 TX Hash: {}", tx_hash);
-            println!("   📍 Output 0: {} monete per Bob", 50);
-            println!("   📍 Output 1: {} monete per Alice", 45);
-            
+            println!("\nNuovi UTXO creati:");
+            println!("   TX Hash: {}", tx_hash);
+            println!("   Output 0: {} monete per Bob", 50);
+            println!("   Output 1: {} monete per Alice", 45);
+
         }
         Err(e) => {
-            println!("❌ Transazione non valida: {:?}", e);
+            println!("Transazione non valida: {:?}", e);
         }
     }
     
     // 8. Test di validazione con errori
-    println!("\n🧪 Test di prevenzione doppia spesa...");
+    println!("\nTest di prevenzione doppia spesa...");
     
     // Proviamo a riutilizzare lo stesso input (doppia spesa)
     let dummy_signature2 = Signature::sign_output(&dummy_hash, &alice_private);
@@ -119,12 +119,10 @@ fn main() -> Result<(), ValidationError> {
     );
     
     match double_spend_tx.validate(&utxo_set) {
-        Ok(()) => println!("❌ ERRORE: Doppia spesa non rilevata!"),
-        Err(ValidationError::InputNotFound) => println!("✅ Doppia spesa correttamente prevenuta!"),
-        Err(e) => println!("⚠️  Errore inaspettato: {:?}", e),
+        Ok(()) => println!("ERRORE: Doppia spesa non rilevata!"),
+        Err(ValidationError::InputNotFound) => println!("Doppia spesa correttamente prevenuta!"),
+        Err(e) => println!("Errore inaspettato: {:?}", e),
     }
-    
-    println!("\n🎉 Demo completato con successo!");
-    
+
     Ok(())
 }

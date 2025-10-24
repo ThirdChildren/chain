@@ -71,10 +71,4 @@ fn main() {
             println!("❌ Error reading public key file {}: {}", public_key_file, e);
         }
     }
-
-    println!("\n📝 Key Format Information:");
-    println!("- Keys are stored as raw bytes (not PEM or other formats)");
-    println!("- Private key: 32 bytes (secp256k1 scalar)");
-    println!("- Public key: 65 bytes (uncompressed secp256k1 point)");
-    println!("- Use hex representation for manual verification");
 }

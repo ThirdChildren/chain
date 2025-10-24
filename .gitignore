@@ -1,6 +1,7 @@
 /target
-/miner/*.cbor
-/miner/*.pem
-/rustcore/*.cbor
 /docs
 /.zed
+/rustcore/*.priv.bytes
+/rustcore/*.pub.bytes
+
+commands.txt

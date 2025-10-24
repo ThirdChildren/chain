@@ -11,8 +11,8 @@ pub mod mldsa;
 pub mod default;
 
 pub use hash::{Hash, Hasher};
-pub use signature::{Signature, PrivateKey, PublicKey};
-pub use backend::{CryptoBackend, CryptoKey, CryptoSignature, KeyPair};
+pub use signature::{Signature, PrivateKey, PublicKey, KeyPair};
+pub use backend::{CryptoBackend, CryptoKey, CryptoSignature, KeyPair as CryptoKeyPair};
 
 #[cfg(feature = "secp256k1")]
 pub use secp256k1::{Secp256k1Backend, Secp256k1PublicKey, Secp256k1PrivateKey, Secp256k1Signature};

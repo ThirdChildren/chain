@@ -10,26 +10,14 @@ pub struct MLDSABackend;
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct MLDSAPublicKey(pub Vec<u8>);
 
-/// Private key structure that includes both the secret key and public key
-/// In Dilithium, we need to store both since public key derivation is not straightforward
+/// ML-DSA Private Key
+/// Note: Internally stores both secret and public keys together,
+/// as ML-DSA doesn't support efficient public key derivation.
+/// The serialization format includes both keys for full compatibility.
 #[derive(Clone, Debug)]
 pub struct MLDSAPrivateKey {
     secret_key: Vec<u8>,
     public_key: Vec<u8>,
-}
-
-impl MLDSAPrivateKey {
-    pub fn new(secret_key: Vec<u8>, public_key: Vec<u8>) -> Self {
-        Self { secret_key, public_key }
-    }
-    
-    pub fn secret_key_bytes(&self) -> &[u8] {
-        &self.secret_key
-    }
-    
-    pub fn public_key_bytes(&self) -> &[u8] {
-        &self.public_key
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -55,7 +43,7 @@ impl CryptoKey for MLDSAPublicKey {
 
 impl CryptoKey for MLDSAPrivateKey {
     fn to_bytes(&self) -> Vec<u8> {
-        // Store both secret key and public key
+        // Serialize both keys together
         // Format: [secret_key_len (4 bytes)][secret_key][public_key]
         let sk_len = self.secret_key.len() as u32;
         let mut bytes = Vec::with_capacity(4 + self.secret_key.len() + self.public_key.len());
@@ -97,7 +85,7 @@ impl CryptoKey for MLDSAPrivateKey {
             ).into());
         }
         
-        Ok(MLDSAPrivateKey::new(secret_key, public_key))
+        Ok(MLDSAPrivateKey { secret_key, public_key })
     }
 }
 
@@ -132,17 +120,20 @@ impl CryptoBackend for MLDSABackend {
         
         KeyPair::new(
             MLDSAPublicKey(pk_bytes.clone()),
-            MLDSAPrivateKey::new(sk_bytes, pk_bytes),
+            MLDSAPrivateKey {
+                secret_key: sk_bytes,
+                public_key: pk_bytes,
+            },
         )
     }
     
     fn public_key_from_private(private_key: &Self::PrivateKey) -> Self::PublicKey {
-        // Extract the stored public key from the private key structure
+        // Extract the stored public key from the private key
         MLDSAPublicKey(private_key.public_key.clone())
     }
     
     fn sign(data: &Hash, private_key: &Self::PrivateKey) -> Self::Signature {
-        let sk = dilithium5::SecretKey::from_bytes(private_key.secret_key_bytes())
+        let sk = dilithium5::SecretKey::from_bytes(&private_key.secret_key)
             .expect("Invalid secret key");
         
         // Sign the hash bytes
