@@ -20,6 +20,7 @@ pub struct MLDSAPrivateKey {
     public_key: Vec<u8>,
 }
 
+
 #[derive(Clone, Debug)]
 pub struct MLDSASignature(pub Vec<u8>);
 
@@ -86,6 +87,16 @@ impl CryptoKey for MLDSAPrivateKey {
         }
         
         Ok(MLDSAPrivateKey { secret_key, public_key })
+    }
+
+    /// Extract only the secret key bytes 
+    fn secret_key_bytes(&self) -> &[u8] {
+        &self.secret_key
+    }
+    
+    /// Extract the embedded public key bytes
+    fn embedded_public_key_bytes(&self) -> &[u8] {
+        &self.public_key
     }
 }
 

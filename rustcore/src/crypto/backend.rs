@@ -6,6 +6,14 @@ pub trait CryptoKey: Clone + std::fmt::Debug {
     fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>>
     where
         Self: Sized;
+
+    fn secret_key_bytes(&self) -> &[u8] {
+        panic!("secret_key_bytes() not implemented for this key type");
+    }
+
+    fn embedded_public_key_bytes(&self) -> &[u8] {
+        panic!("embedded_public_key_bytes() not implemented for this key type");
+    }
 }
 
 #[derive(Clone, Debug)]
