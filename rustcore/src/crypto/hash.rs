@@ -4,6 +4,66 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Hash(U256);
 
+/// Trait for types that can be hashed
+pub trait Hashable {
+    fn hash_update(&self, hasher: &mut Hasher);
+}
+
+// Implement Hashable for common types
+impl Hashable for &[u8] {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(self);
+    }
+}
+
+impl Hashable for u8 {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(&[*self]);
+    }
+}
+
+impl Hashable for u32 {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(&self.to_le_bytes());
+    }
+}
+
+impl Hashable for u64 {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(&self.to_le_bytes());
+    }
+}
+
+impl Hashable for usize {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(&(*self as u64).to_le_bytes());
+    }
+}
+
+impl<const N: usize> Hashable for [u8; N] {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(self);
+    }
+}
+
+impl<const N: usize> Hashable for &[u8; N] {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(*self);
+    }
+}
+
+impl Hashable for Vec<u8> {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(self);
+    }
+}
+
+impl Hashable for &Vec<u8> {
+    fn hash_update(&self, hasher: &mut Hasher) {
+        hasher.inner.update(self);
+    }
+}
+
 pub struct Hasher {
     inner: blake3::Hasher,
 }
@@ -35,23 +95,9 @@ impl Hasher {
         }
     }
     
-    pub fn update(&mut self, data: &[u8]) -> &mut Self {
-        self.inner.update(data);
-        self
-    }
-    
-    pub fn update_byte(&mut self, byte: u8) -> &mut Self {
-        self.inner.update(&[byte]);
-        self
-    }
-    
-    pub fn update_u32_le(&mut self, value: u32) -> &mut Self {
-        self.inner.update(&value.to_le_bytes());
-        self
-    }
-    
-    pub fn update_u64_le(&mut self, value: u64) -> &mut Self {
-        self.inner.update(&value.to_le_bytes());
+    /// Universal input function - accepts any Hashable type
+    pub fn input<T: Hashable>(&mut self, data: T) -> &mut Self {
+        data.hash_update(self);
         self
     }
     
@@ -108,7 +154,7 @@ impl Hash {
     /// Hash function base
     pub fn hash(data: &[u8]) -> Self {
         let mut hasher = Hasher::new();
-        hasher.update(data);
+        hasher.input(data);
         hasher.finalize()
     }
     
@@ -126,7 +172,7 @@ impl Hash {
     pub fn hash_parts(data_parts: &[&[u8]]) -> Self {
         let mut hasher = Hasher::new();
         for part in data_parts {
-            hasher.update(part);
+            hasher.input(*part);
         }
         hasher.finalize()
     }
@@ -145,8 +191,8 @@ mod tests {
     #[test]
     fn test_hasher_basic() {
         let mut hasher = Hasher::new();
-        hasher.update(b"Hello, ");
-        hasher.update(b"World!");
+        hasher.input(b"Hello, ");
+        hasher.input(b"World!");
         let hash1 = hasher.finalize();
         
         let hash2 = Hash::hash(b"Hello, World!");
@@ -157,15 +203,15 @@ mod tests {
     #[test]
     fn test_hasher_with_builder() {
         let hash1 = Hash::compute(|hasher| {
-            hasher.update(b"test");
-            hasher.update_u32_le(42);
-            hasher.update_u64_le(1234567890);
+            hasher.input(b"test");
+            hasher.input(42u32);
+            hasher.input(1234567890u64);
         });
         
         let hash2 = Hash::compute(|hasher| {
-            hasher.update(b"test");
-            hasher.update_u32_le(42);
-            hasher.update_u64_le(1234567890);
+            hasher.input(b"test");
+            hasher.input(42u32);
+            hasher.input(1234567890u64);
         });
         
         assert_eq!(hash1, hash2);
@@ -178,7 +224,7 @@ mod tests {
         
         let hash2 = Hash::compute(|hasher| {
             for part in data_parts {
-                hasher.update(part);
+                hasher.input(*part);
             }
         });
         
@@ -189,18 +235,18 @@ mod tests {
     fn test_hasher_keyed() {
         let key = [42u8; 32];
         let mut hasher1 = Hasher::new_keyed(&key);
-        hasher1.update(b"authenticated data");
+        hasher1.input(b"authenticated data");
         let hash1 = hasher1.finalize();
         
         let mut hasher2 = Hasher::new_keyed(&key);
-        hasher2.update(b"authenticated data");
+        hasher2.input(b"authenticated data");
         let hash2 = hasher2.finalize();
         
         assert_eq!(hash1, hash2);
         
         let different_key = [24u8; 32];
         let mut hasher3 = Hasher::new_keyed(&different_key);
-        hasher3.update(b"authenticated data");
+        hasher3.input(b"authenticated data");
         let hash3 = hasher3.finalize();
         
         assert_ne!(hash1, hash3);
@@ -209,17 +255,17 @@ mod tests {
     #[test]
     fn test_hasher_derive_key() {
         let mut hasher1 = Hasher::new_derive_key("context1");
-        hasher1.update(b"input data");
+        hasher1.input(b"input data");
         let derived1 = hasher1.finalize();
         
         let mut hasher2 = Hasher::new_derive_key("context1");
-        hasher2.update(b"input data");
+        hasher2.input(b"input data");
         let derived2 = hasher2.finalize();
         
         assert_eq!(derived1, derived2);
         
         let mut hasher3 = Hasher::new_derive_key("context2");
-        hasher3.update(b"input data");
+        hasher3.input(b"input data");
         let derived3 = hasher3.finalize();
         
         assert_ne!(derived1, derived3);
@@ -228,13 +274,13 @@ mod tests {
     #[test]
     fn test_hasher_finalize_bytes() {
         let mut hasher = Hasher::new();
-        hasher.update(b"test data");
+        hasher.input(b"test data");
         let bytes = hasher.finalize_bytes();
         
         assert_eq!(bytes.len(), 32);
         
         let mut hasher2 = Hasher::new();
-        hasher2.update(b"test data");
+        hasher2.input(b"test data");
         let hash = hasher2.finalize();
         
         assert_eq!(bytes, hash.as_bytes());
@@ -243,9 +289,9 @@ mod tests {
     #[test]
     fn test_hasher_number_methods() {
         let hash1 = Hash::compute(|hasher| {
-            hasher.update_byte(0xFF);
-            hasher.update_u32_le(0x12345678);
-            hasher.update_u64_le(0x123456789ABCDEF0);
+            hasher.input(0xFFu8);
+            hasher.input(0x12345678u32);
+            hasher.input(0x123456789ABCDEF0u64);
         });
         
         let mut data = Vec::new();
@@ -263,7 +309,7 @@ mod tests {
         
         let hash1 = Hash::hash(data);
         let hash2 = Hash::hash(data);
-        let hash3 = Hash::compute(|hasher| { hasher.update(data); });
+        let hash3 = Hash::compute(|hasher| { hasher.input(data); });
         
         assert_eq!(hash1, hash2);
         assert_eq!(hash1, hash3);

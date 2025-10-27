@@ -10,7 +10,7 @@ pub mod mldsa;
 
 pub mod default;
 
-pub use hash::{Hash, Hasher};
+pub use hash::{Hash, Hasher, Hashable};
 pub use signature::{Signature, PrivateKey, PublicKey, KeyPair};
 pub use backend::{CryptoBackend, CryptoKey, CryptoSignature, KeyPair as CryptoKeyPair};
 

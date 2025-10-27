@@ -66,19 +66,19 @@ impl Transaction {
     /// Trabsaction hash
     pub fn hash(&self) -> Hash {
         Hash::compute(|hasher| {
-            hasher.update_u32_le(self.inputs.len() as u32);
+            hasher.input(self.inputs.len() as u32);
             
             for input in &self.inputs {
-                hasher.update(&input.previous_tx_id);
-                hasher.update_u32_le(input.output_index);
-                hasher.update(&input.public_key.to_bytes());
+                hasher.input(&input.previous_tx_id);
+                hasher.input(input.output_index);
+                hasher.input(&input.public_key.to_bytes());
             }
             
-            hasher.update_u32_le(self.outputs.len() as u32);
+            hasher.input(self.outputs.len() as u32);
             
             for output in &self.outputs {
-                hasher.update_u64_le(output.amount);
-                hasher.update(&output.recipient);
+                hasher.input(output.amount);
+                hasher.input(&output.recipient);
             }
         })
     }
@@ -86,21 +86,21 @@ impl Transaction {
     /// Create a hash for signing a specific input
     pub fn signature_hash(&self, input_index: usize) -> Hash {
         Hash::compute(|hasher| {
-            hasher.update_u32_le(self.inputs.len() as u32);
+            hasher.input(self.inputs.len() as u32);
             
             for (i, input) in self.inputs.iter().enumerate() {
-                hasher.update(&input.previous_tx_id);
-                hasher.update_u32_le(input.output_index);
+                hasher.input(&input.previous_tx_id);
+                hasher.input(input.output_index);
                 
                 if i == input_index {
-                    hasher.update(&input.public_key.to_bytes());
+                    hasher.input(&input.public_key.to_bytes());
                 }
             }
             
-            hasher.update_u32_le(self.outputs.len() as u32);
+            hasher.input(self.outputs.len() as u32);
             for output in &self.outputs {
-                hasher.update_u64_le(output.amount);
-                hasher.update(&output.recipient);
+                hasher.input(output.amount);
+                hasher.input(&output.recipient);
             }
         })
     }
@@ -189,10 +189,9 @@ impl Transaction {
         Ok(())
     }
     
-    
     pub fn public_key_to_address(public_key: &PublicKey) -> [u8; 20] {
         let hash = Hash::compute(|hasher| {
-            hasher.update(&public_key.to_bytes());
+            hasher.input(&public_key.to_bytes());
         });
         let mut address = [0u8; 20];
         address.copy_from_slice(&hash.as_bytes()[0..20]);
