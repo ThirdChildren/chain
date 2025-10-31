@@ -4,6 +4,7 @@ use crate::types::transaction::{Transaction, UTXOSet};
 use std::collections::HashSet;
 
 pub struct Block {
+    hash: Hash,
     pub index: u32,
     pub prev_block_hash: Hash,
     pub timestamp: u128,
@@ -13,7 +14,32 @@ pub struct Block {
 }
 
 impl Block {
+    pub fn new(
+        index: u32,
+        prev_block_hash: Hash,
+        timestamp: u128,
+        transactions: Vec<Transaction>,
+        author: PublicKey,
+        signature: Signature,
+    ) -> Self {
+        let mut block = Block {
+            hash: Hash::zero(),
+            index,
+            prev_block_hash,
+            timestamp,
+            transactions,
+            author,
+            signature,
+        };
+        block.hash = block.calculate_hash();
+        block
+    }
+
     pub fn hash(&self) -> Hash {
+        self.hash
+    }
+
+    fn calculate_hash(&self) -> Hash {
         Hash::compute(|hasher| {
             hasher.input(self.index);
             hasher.input(self.prev_block_hash);
@@ -29,7 +55,6 @@ impl Block {
         })
     }
 
-    /// Verify if the previous block hash matches the expected hash of the block
     pub fn has_prev_hash(&self, expected_hash: &Hash) -> bool {
         self.prev_block_hash == *expected_hash
     }
@@ -68,10 +93,8 @@ impl Block {
         true
     }
 
-    /// Verify that the hash of the block is valid
     pub fn verify_hash(&self, claimed_hash: &Hash) -> bool {
-        let calculated_hash = self.hash();
-        calculated_hash == *claimed_hash
+        self.hash == *claimed_hash
     }
 
     /// Complete validation of the block

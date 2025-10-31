@@ -44,14 +44,14 @@ fn main() {
     println!("  Alice has 100 coins from coinbase\n");
 
     // Create Genesis Block (empty transactions for simplicity)
-    let genesis_block = Block {
-        index: 0,
-        prev_block_hash: Hash::zero(),
-        timestamp: 1000000,
-        transactions: vec![],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
-    };
+    let genesis_block = Block::new(
+        0,
+        Hash::zero(),
+        1000000,
+        vec![],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
 
     let genesis_hash = genesis_block.hash();
 
@@ -97,14 +97,14 @@ fn main() {
     println!("");
 
     // Create Block 1
-    let block_1 = Block {
-        index: 1,
-        prev_block_hash: genesis_hash,
-        timestamp: 1000100,
-        transactions: vec![tx1.clone()],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::hash(b"block_1_data"), &miner_keypair.private_key),
-    };
+    let block_1 = Block::new(
+        1,
+        genesis_hash,
+        1000100,
+        vec![tx1.clone()],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::hash(b"block_1_data"), &miner_keypair.private_key),
+    );
 
     let block_1_hash = block_1.hash();
 
@@ -164,14 +164,14 @@ fn main() {
 
     // Test 1: Block with wrong prev_hash
     println!("Test 1: Block with wrong prev_hash");
-    let invalid_block_1 = Block {
-        index: 2,
-        prev_block_hash: Hash::zero(),
-        timestamp: 1000200,
-        transactions: vec![],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
-    };
+    let invalid_block_1 = Block::new(
+        2,
+        Hash::zero(),
+        1000200,
+        vec![],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
     let invalid_hash_1 = invalid_block_1.hash();
 
     print!("  Validation result... ");
@@ -184,14 +184,14 @@ fn main() {
 
     // Test 2: Block with duplicate transactions
     println!("Test 2: Block with duplicate transactions");
-    let invalid_block_2 = Block {
-        index: 2,
-        prev_block_hash: block_1_hash,
-        timestamp: 1000200,
-        transactions: vec![tx1.clone(), tx1.clone()],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
-    };
+    let invalid_block_2 = Block::new(
+        2,
+        block_1_hash,
+        1000200,
+        vec![tx1.clone(), tx1.clone()],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
 
     print!("  Transactions validation... ");
     if invalid_block_2.are_valid_transactions(&utxo_set) {
@@ -236,14 +236,14 @@ fn main() {
         .sign_input(0, &bob_keypair.private_key)
         .expect("Failed to sign");
 
-    let invalid_block_3 = Block {
-        index: 2,
-        prev_block_hash: block_1_hash,
-        timestamp: 1000200,
-        transactions: vec![double_spend_tx1, double_spend_tx2],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
-    };
+    let invalid_block_3 = Block::new(
+        2,
+        block_1_hash,
+        1000200,
+        vec![double_spend_tx1, double_spend_tx2],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
 
     print!("  Transactions validation... ");
     if invalid_block_3.are_valid_transactions(&utxo_set) {
@@ -255,14 +255,14 @@ fn main() {
 
     // Test 4: Block with wrong hash verification
     println!("Test 4: Block with wrong hash claim");
-    let valid_structure_block = Block {
-        index: 2,
-        prev_block_hash: block_1_hash,
-        timestamp: 1000200,
-        transactions: vec![],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
-    };
+    let valid_structure_block = Block::new(
+        2,
+        block_1_hash,
+        1000200,
+        vec![],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
     let wrong_hash = Hash::hash(b"wrong_hash");
 
     print!("  Hash verification... ");
@@ -275,14 +275,14 @@ fn main() {
 
     // Test 5: Genesis block with non-zero prev_hash
     println!("Test 5: Invalid genesis block");
-    let invalid_genesis = Block {
-        index: 0,
-        prev_block_hash: Hash::hash(b"non_zero"),
-        timestamp: 1000000,
-        transactions: vec![],
-        author: miner_keypair.public_key.clone(),
-        signature: Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
-    };
+    let invalid_genesis = Block::new(
+        0,
+        Hash::hash(b"non_zero"),
+        1000000,
+        vec![],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
     let invalid_genesis_hash = invalid_genesis.hash();
 
     print!("  Genesis validation... ");
