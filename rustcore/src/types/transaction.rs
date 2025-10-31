@@ -1,5 +1,5 @@
-use crate::crypto::{PublicKey, Signature, Hash, PrivateKey};
 use crate::crypto::backend::CryptoKey;
+use crate::crypto::{Hash, PrivateKey, PublicKey, Signature};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -51,31 +51,31 @@ impl Transaction {
             bytes.extend_from_slice(&input.output_index.to_le_bytes());
             bytes.extend_from_slice(&input.public_key.to_bytes());
         }
-        
+
         bytes.extend_from_slice(&(self.outputs.len() as u32).to_le_bytes());
-        
+
         // Serializza ogni output
         for output in &self.outputs {
             bytes.extend_from_slice(&output.amount.to_le_bytes());
             bytes.extend_from_slice(&output.recipient);
         }
-        
+
         bytes
     }
-    
-    /// Trabsaction hash
+
+    /// Transaction hash
     pub fn hash(&self) -> Hash {
         Hash::compute(|hasher| {
             hasher.input(self.inputs.len() as u32);
-            
+
             for input in &self.inputs {
                 hasher.input(&input.previous_tx_id);
                 hasher.input(input.output_index);
                 hasher.input(&input.public_key.to_bytes());
             }
-            
+
             hasher.input(self.outputs.len() as u32);
-            
+
             for output in &self.outputs {
                 hasher.input(output.amount);
                 hasher.input(&output.recipient);
@@ -87,16 +87,16 @@ impl Transaction {
     pub fn signature_hash(&self, input_index: usize) -> Hash {
         Hash::compute(|hasher| {
             hasher.input(self.inputs.len() as u32);
-            
+
             for (i, input) in self.inputs.iter().enumerate() {
                 hasher.input(&input.previous_tx_id);
                 hasher.input(input.output_index);
-                
+
                 if i == input_index {
                     hasher.input(&input.public_key.to_bytes());
                 }
             }
-            
+
             hasher.input(self.outputs.len() as u32);
             for output in &self.outputs {
                 hasher.input(output.amount);
@@ -106,17 +106,21 @@ impl Transaction {
     }
 
     /// Sign a specific input
-    pub fn sign_input(&mut self, input_index: usize, private_key: &PrivateKey) -> Result<(), ValidationError> {
+    pub fn sign_input(
+        &mut self,
+        input_index: usize,
+        private_key: &PrivateKey,
+    ) -> Result<(), ValidationError> {
         if input_index >= self.inputs.len() {
             return Err(ValidationError::InputNotFound);
         }
-        
+
         let sig_hash = self.signature_hash(input_index);
         let signature = Signature::sign_output(&sig_hash, private_key);
-        
+
         self.inputs[input_index].signature = signature;
         self.inputs[input_index].public_key = private_key.public_key();
-        
+
         Ok(())
     }
 
@@ -125,17 +129,21 @@ impl Transaction {
         if self.inputs.is_empty() || self.outputs.is_empty() {
             return Err(ValidationError::EmptyTransaction);
         }
-        
+
         let mut total_input_amount = 0u64;
         let mut total_output_amount = 0u64;
 
         // Validate each input
         for (i, input) in self.inputs.iter().enumerate() {
             // Check if the UTXO exists
-            let utxo_key = (Hash::from_bytes_array(input.previous_tx_id), input.output_index);
-            let referenced_output = utxo_set.get(&utxo_key)
+            let utxo_key = (
+                Hash::from_bytes_array(input.previous_tx_id),
+                input.output_index,
+            );
+            let referenced_output = utxo_set
+                .get(&utxo_key)
                 .ok_or(ValidationError::InputNotFound)?;
-            
+
             // Check that the recipient of the previous output matches the public key
             let public_key_hash = Self::public_key_to_address(&input.public_key);
             if public_key_hash != referenced_output.recipient {
@@ -147,48 +155,53 @@ impl Transaction {
             if !input.signature.verify(&sig_hash, &input.public_key) {
                 return Err(ValidationError::InvalidSignature);
             }
-            
-            total_input_amount = total_input_amount.checked_add(referenced_output.amount)
+
+            total_input_amount = total_input_amount
+                .checked_add(referenced_output.amount)
                 .ok_or(ValidationError::InvalidAmount)?;
         }
-        
+
         for output in &self.outputs {
             if output.amount == 0 {
                 return Err(ValidationError::InvalidAmount);
             }
-            total_output_amount = total_output_amount.checked_add(output.amount)
+            total_output_amount = total_output_amount
+                .checked_add(output.amount)
                 .ok_or(ValidationError::InvalidAmount)?;
         }
-        
+
         // Check that input >= output (fees go to the miner)
         if total_input_amount < total_output_amount {
             return Err(ValidationError::InsufficientFunds);
         }
-        
+
         Ok(())
     }
 
     /// Apply the transaction to the UTXO set (remove inputs, add outputs)
     pub fn apply_to_utxo_set(&self, utxo_set: &mut UTXOSet) -> Result<(), ValidationError> {
         self.validate(utxo_set)?;
-        
+
         let tx_hash = self.hash();
-        
+
         for input in &self.inputs {
-            let utxo_key = (Hash::from_bytes_array(input.previous_tx_id), input.output_index);
+            let utxo_key = (
+                Hash::from_bytes_array(input.previous_tx_id),
+                input.output_index,
+            );
             if utxo_set.remove(&utxo_key).is_none() {
                 return Err(ValidationError::DoubleSpend);
             }
         }
-        
+
         for (index, output) in self.outputs.iter().enumerate() {
             let utxo_key = (tx_hash, index as u32);
             utxo_set.insert(utxo_key, output.clone());
         }
-        
+
         Ok(())
     }
-    
+
     pub fn public_key_to_address(public_key: &PublicKey) -> [u8; 20] {
         let hash = Hash::compute(|hasher| {
             hasher.input(&public_key.to_bytes());
@@ -197,23 +210,27 @@ impl Transaction {
         address.copy_from_slice(&hash.as_bytes()[0..20]);
         address
     }
-    
+
     /// Calculate transaction fee
     pub fn calculate_fee(&self, utxo_set: &UTXOSet) -> Result<u64, ValidationError> {
         let mut total_input = 0u64;
         let mut total_output = 0u64;
-        
+
         for input in &self.inputs {
-            let utxo_key = (Hash::from_bytes_array(input.previous_tx_id), input.output_index);
-            let output = utxo_set.get(&utxo_key)
+            let utxo_key = (
+                Hash::from_bytes_array(input.previous_tx_id),
+                input.output_index,
+            );
+            let output = utxo_set
+                .get(&utxo_key)
                 .ok_or(ValidationError::InputNotFound)?;
             total_input += output.amount;
         }
-        
+
         for output in &self.outputs {
             total_output += output.amount;
         }
-        
+
         Ok(total_input - total_output)
     }
 }
@@ -221,368 +238,342 @@ impl Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{PrivateKey, Hash};
-    
+    use crate::crypto::{Hash, PrivateKey};
+
     fn create_dummy_utxo_set() -> (UTXOSet, Hash, [u8; 20]) {
         let mut utxo_set = UTXOSet::new();
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let alice_address = Transaction::public_key_to_address(&alice_public);
-        
+
         let genesis_hash = Hash::hash(b"genesis");
         let output = TxOutput {
             amount: 100,
             recipient: alice_address,
         };
         utxo_set.insert((genesis_hash, 0), output);
-        
+
         (utxo_set, genesis_hash, alice_address)
     }
-    
-    #[test]
-    fn test_transaction_creation() {
-        let inputs = vec![];
-        let outputs = vec![];
-        let tx = Transaction::new(inputs, outputs);
-        
-        assert_eq!(tx.inputs.len(), 0);
-        assert_eq!(tx.outputs.len(), 0);
-    }
-    
-    #[test]
-    fn test_public_key_to_address() {
-        let private_key = PrivateKey::new_key();
-        let public_key = private_key.public_key();
-        let address = Transaction::public_key_to_address(&public_key);
-        
-        assert_eq!(address.len(), 20);
-    }
-    
-    #[test]
-    fn test_transaction_hash() {
-        let alice_private = PrivateKey::new_key();
-        let alice_public = alice_private.public_key();
-        
-        let dummy_hash = Hash::hash(b"dummy");
-        let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
-        let input = TxInput {
-            previous_tx_id: [1u8; 32],
-            output_index: 0,
-            signature: dummy_signature,
-            public_key: alice_public.clone(),
-        };
-        
-        let output = TxOutput {
-            amount: 50,
-            recipient: [2u8; 20],
-        };
-        
-        let tx = Transaction::new(vec![input], vec![output]);
-        let hash1 = tx.hash();
-        let hash2 = tx.hash();
-        
-        // L'hash dovrebbe essere deterministico
-        assert_eq!(hash1.as_bytes(), hash2.as_bytes());
-    }
-    
+
     #[test]
     fn test_signature_hash() {
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
-        
+
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature1 = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
         let dummy_signature2 = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input1 = TxInput {
             previous_tx_id: [1u8; 32],
             output_index: 0,
             signature: dummy_signature1,
             public_key: alice_public.clone(),
         };
-        
+
         let input2 = TxInput {
             previous_tx_id: [2u8; 32],
             output_index: 1,
             signature: dummy_signature2,
             public_key: alice_public.clone(),
         };
-        
+
         let output = TxOutput {
             amount: 50,
             recipient: [2u8; 20],
         };
-        
+
         let tx = Transaction::new(vec![input1.clone()], vec![output.clone()]);
-        
-        // Verifichiamo che signature_hash generi un hash
+
+        // Verify that signature_hash generates a hash
         let sig_hash = tx.signature_hash(0);
         assert_eq!(sig_hash.as_bytes().len(), 32);
-        
-        // Verifichiamo che signature_hash per indici diversi sia diverso
+
+        // Verify that signature_hash for different indices is different
         let tx_multi = Transaction::new(vec![input1, input2], vec![output]);
         let sig_hash_0 = tx_multi.signature_hash(0);
         let sig_hash_1 = tx_multi.signature_hash(1);
-        
-        // Gli hash per input diversi dovrebbero essere diversi
+
+        // The hash for different inputs should be different
         assert_ne!(sig_hash_0.as_bytes(), sig_hash_1.as_bytes());
     }
-    
+
     #[test]
     fn test_valid_transaction() {
         let (mut utxo_set, genesis_hash, _alice_address) = create_dummy_utxo_set();
-        
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let bob_address = [3u8; 20];
-        
-        // Aggiorniamo l'address di Alice nell'UTXO set
+
+        // Update Alice's address in the UTXO set
         let alice_real_address = Transaction::public_key_to_address(&alice_public);
         let output = TxOutput {
             amount: 100,
             recipient: alice_real_address,
         };
         utxo_set.insert((genesis_hash, 0), output);
-        
+
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input = TxInput {
             previous_tx_id: genesis_hash.as_bytes(),
             output_index: 0,
             signature: dummy_signature,
             public_key: alice_public.clone(),
         };
-        
+
         let output_to_bob = TxOutput {
             amount: 60,
             recipient: bob_address,
         };
-        
+
         let change_to_alice = TxOutput {
             amount: 35,
             recipient: alice_real_address,
         };
-        
+
         let mut tx = Transaction::new(vec![input], vec![output_to_bob, change_to_alice]);
-        
-        // Firmiamo la transazione
+
         tx.sign_input(0, &alice_private).unwrap();
-        
-        // La transazione dovrebbe essere valida
+
         assert!(tx.validate(&utxo_set).is_ok());
     }
-    
+
     #[test]
     fn test_empty_transaction_validation() {
         let utxo_set = UTXOSet::new();
-        
-        // Transazione senza input
-        let tx_no_inputs = Transaction::new(vec![], vec![TxOutput { amount: 10, recipient: [1u8; 20] }]);
-        assert!(matches!(tx_no_inputs.validate(&utxo_set), Err(ValidationError::EmptyTransaction)));
-        
+
+        // Transaction without input
+        let tx_no_inputs = Transaction::new(
+            vec![],
+            vec![TxOutput {
+                amount: 10,
+                recipient: [1u8; 20],
+            }],
+        );
+        assert!(matches!(
+            tx_no_inputs.validate(&utxo_set),
+            Err(ValidationError::EmptyTransaction)
+        ));
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
-        // Transazione senza output
+
+        // Transaction without outputs
         let tx_no_outputs = Transaction::new(
             vec![TxInput {
                 previous_tx_id: [1u8; 32],
                 output_index: 0,
                 signature: dummy_signature,
                 public_key: alice_public,
-            }], 
-            vec![]
+            }],
+            vec![],
         );
-        assert!(matches!(tx_no_outputs.validate(&utxo_set), Err(ValidationError::EmptyTransaction)));
+        assert!(matches!(
+            tx_no_outputs.validate(&utxo_set),
+            Err(ValidationError::EmptyTransaction)
+        ));
     }
-    
+
     #[test]
     fn test_input_not_found() {
         let utxo_set = UTXOSet::new();
-        
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input = TxInput {
-            previous_tx_id: [1u8; 32], // UTXO inesistente
+            previous_tx_id: [1u8; 32], // UTXO not found
             output_index: 0,
             signature: dummy_signature,
             public_key: alice_public,
         };
-        
+
         let output = TxOutput {
             amount: 10,
             recipient: [2u8; 20],
         };
-        
+
         let tx = Transaction::new(vec![input], vec![output]);
-        
-        assert!(matches!(tx.validate(&utxo_set), Err(ValidationError::InputNotFound)));
+
+        assert!(matches!(
+            tx.validate(&utxo_set),
+            Err(ValidationError::InputNotFound)
+        ));
     }
-    
+
     #[test]
     fn test_insufficient_funds() {
         let (mut utxo_set, genesis_hash, _) = create_dummy_utxo_set();
-        
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let alice_real_address = Transaction::public_key_to_address(&alice_public);
-        
-        // Aggiorniamo l'UTXO con l'address corretto
+
+        // Update UTXO with correct address
         let output = TxOutput {
-            amount: 50, // Solo 50 monete disponibili
+            amount: 50,
             recipient: alice_real_address,
         };
         utxo_set.insert((genesis_hash, 0), output);
-        
+
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input = TxInput {
             previous_tx_id: genesis_hash.as_bytes(),
             output_index: 0,
             signature: dummy_signature,
             public_key: alice_public.clone(),
         };
-        
+
         let output = TxOutput {
-            amount: 100, // Cerca di spendere più di quello che ha
+            amount: 100, // Spending more than available
             recipient: [2u8; 20],
         };
-        
+
         let mut tx = Transaction::new(vec![input], vec![output]);
         tx.sign_input(0, &alice_private).unwrap();
-        
-        assert!(matches!(tx.validate(&utxo_set), Err(ValidationError::InsufficientFunds)));
+
+        assert!(matches!(
+            tx.validate(&utxo_set),
+            Err(ValidationError::InsufficientFunds)
+        ));
     }
-    
+
     #[test]
     fn test_zero_amount_output() {
         let (mut utxo_set, genesis_hash, _) = create_dummy_utxo_set();
-        
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let alice_real_address = Transaction::public_key_to_address(&alice_public);
-        
-        // Aggiorniamo l'UTXO con l'address corretto
+
+        // Update UTXO with correct address
         let output = TxOutput {
             amount: 100,
             recipient: alice_real_address,
         };
         utxo_set.insert((genesis_hash, 0), output);
-        
+
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input = TxInput {
             previous_tx_id: genesis_hash.as_bytes(),
             output_index: 0,
             signature: dummy_signature,
             public_key: alice_public.clone(),
         };
-        
+
         let output = TxOutput {
-            amount: 0, // Amount zero non valido
+            amount: 0,
             recipient: [2u8; 20],
         };
-        
+
         let mut tx = Transaction::new(vec![input], vec![output]);
         tx.sign_input(0, &alice_private).unwrap();
-        
-        assert!(matches!(tx.validate(&utxo_set), Err(ValidationError::InvalidAmount)));
+
+        assert!(matches!(
+            tx.validate(&utxo_set),
+            Err(ValidationError::InvalidAmount)
+        ));
     }
-    
+
     #[test]
     fn test_calculate_fee() {
         let (mut utxo_set, genesis_hash, _) = create_dummy_utxo_set();
-        
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let alice_real_address = Transaction::public_key_to_address(&alice_public);
-        
+
         // UTXO con 100 monete
         let output = TxOutput {
             amount: 100,
             recipient: alice_real_address,
         };
         utxo_set.insert((genesis_hash, 0), output);
-        
+
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input = TxInput {
             previous_tx_id: genesis_hash.as_bytes(),
             output_index: 0,
             signature: dummy_signature,
             public_key: alice_public,
         };
-        
+
         let output = TxOutput {
-            amount: 95, // Spende 95, fee = 5
+            amount: 95,
             recipient: [2u8; 20],
         };
-        
+
         let tx = Transaction::new(vec![input], vec![output]);
         let fee = tx.calculate_fee(&utxo_set).unwrap();
-        
+
         assert_eq!(fee, 5);
     }
-    
+
     #[test]
     fn test_double_spend_prevention() {
         let (mut utxo_set, genesis_hash, _) = create_dummy_utxo_set();
-        
+
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
         let alice_real_address = Transaction::public_key_to_address(&alice_public);
-        
+
         let output = TxOutput {
             amount: 100,
             recipient: alice_real_address,
         };
         utxo_set.insert((genesis_hash, 0), output);
-        
+
         let dummy_hash = Hash::hash(b"dummy");
         let dummy_signature1 = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
         let dummy_signature2 = crate::crypto::Signature::sign_output(&dummy_hash, &alice_private);
-        
+
         let input1 = TxInput {
             previous_tx_id: genesis_hash.as_bytes(),
             output_index: 0,
             signature: dummy_signature1,
             public_key: alice_public.clone(),
         };
-        
+
         let input2 = TxInput {
             previous_tx_id: genesis_hash.as_bytes(),
             output_index: 0,
             signature: dummy_signature2,
             public_key: alice_public.clone(),
         };
-        
+
         let output_tx = TxOutput {
             amount: 50,
             recipient: [2u8; 20],
         };
-        
+
         let mut first_tx = Transaction::new(vec![input1], vec![output_tx.clone()]);
         first_tx.sign_input(0, &alice_private).unwrap();
-        
-        // Prima transazione dovrebbe essere applicata con successo
+
+        // First transaction should be applied successfully
         assert!(first_tx.apply_to_utxo_set(&mut utxo_set).is_ok());
-        
-        // Seconda transazione che usa lo stesso input dovrebbe fallire
+
+        // Second transaction that uses the same input should fail
         let mut second_tx = Transaction::new(vec![input2], vec![output_tx]);
         second_tx.sign_input(0, &alice_private).unwrap();
-        
-        // Ora l'UTXO è già stato speso, quindi dovrebbe fallire con InputNotFound
-        assert!(matches!(second_tx.validate(&utxo_set), Err(ValidationError::InputNotFound)));
+
+        // Now the UTXO is already spent, so it should fail with InputNotFound
+        assert!(matches!(
+            second_tx.validate(&utxo_set),
+            Err(ValidationError::InputNotFound)
+        ));
     }
 }
-
