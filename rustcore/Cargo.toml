@@ -30,3 +30,6 @@ pqcrypto-traits = { version = "0.3", optional = true }
 name = "transaction_validation"
 path = "examples/transaction_validation.rs"
 
+[[example]]
+name = "block_validation"
+path = "examples/block_validation.rs"
