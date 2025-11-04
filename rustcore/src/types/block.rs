@@ -3,8 +3,9 @@ use crate::crypto::{Hash, PublicKey, Signature};
 use crate::types::transaction::{Transaction, UTXOSet};
 use std::collections::HashSet;
 
+#[derive(Debug, Clone)]
 pub struct Block {
-    hash: Hash,
+    pub hash: Hash,
     pub index: u32,
     pub prev_block_hash: Hash,
     pub timestamp: u128,
@@ -72,7 +73,19 @@ impl Block {
         // Clone Utxo set for local validation
         let mut temp_utxo = utxo_set.clone();
 
-        for tx in &self.transactions {
+        for (i, tx) in self.transactions.iter().enumerate() {
+            if i == 0 {
+                // First transaction MUST be a coinbase
+                if !tx.is_coinbase() {
+                    return false;
+                }
+            } else {
+                // All other transactions MUST NOT be coinbase
+                if tx.is_coinbase() {
+                    return false;
+                }
+            }
+
             // 1. Verify transaction validity against current UTXO set
             if tx.validate(&temp_utxo).is_err() {
                 return false;
@@ -133,7 +146,7 @@ impl Block {
             return false;
         }
 
-        if !self.are_valid_transactions(utxo_set) {
+        if !self.transactions.is_empty() && !self.are_valid_transactions(utxo_set) {
             return false;
         }
 

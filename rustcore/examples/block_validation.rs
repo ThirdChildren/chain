@@ -31,24 +31,17 @@ fn main() {
     println!("  Bob: {:02x?}...", &bob_address[..4]);
     println!("");
 
-    // Create initial UTXO set with coinbase transaction for Alice
+    // Create initial UTXO set (empty at genesis)
     let mut utxo_set: UTXOSet = HashMap::new();
-    let coinbase_tx_hash = Hash::hash(b"genesis_coinbase");
-    let coinbase_output = TxOutput {
-        amount: 100,
-        recipient: alice_address,
-    };
-    utxo_set.insert((coinbase_tx_hash, 0), coinbase_output);
 
-    println!("Initial UTXO set:");
-    println!("  Alice has 100 coins from coinbase\n");
+    // Create Genesis Block with coinbase transaction for Alice
+    let genesis_coinbase = Transaction::new_coinbase(alice_address, 100);
 
-    // Create Genesis Block (empty transactions for simplicity)
     let genesis_block = Block::new(
         0,
         Hash::zero(),
         1000000,
-        vec![],
+        vec![genesis_coinbase.clone()],
         miner_keypair.public_key.clone(),
         Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
     );
@@ -62,14 +55,24 @@ fn main() {
     println!("  Transactions: {}", genesis_block.transactions.len());
     println!("");
 
-    // Note: Genesis block validation skipped as it has no transactions
-    // In a real blockchain, genesis would have coinbase transaction
-    println!("Genesis Block accepted (no transactions to validate)\n");
+    // Validate genesis block
+    print!("Validating Genesis Block... ");
+    if genesis_block.is_valid_genesis(&utxo_set, &genesis_hash) {
+        println!("PASS");
+        // Apply genesis coinbase to UTXO set
+        genesis_coinbase
+            .apply_to_utxo_set(&mut utxo_set)
+            .expect("Failed to apply genesis coinbase");
+        println!("Genesis Block accepted with coinbase transaction\n");
+    } else {
+        println!("FAIL\n");
+    }
 
     // Create Transaction 1: Alice sends 50 to Bob
+    let genesis_coinbase_hash = genesis_coinbase.hash();
     let mut tx1 = Transaction::new(
         vec![TxInput {
-            previous_tx_id: coinbase_tx_hash.as_bytes(),
+            previous_tx_id: genesis_coinbase_hash.as_bytes(),
             output_index: 0,
             signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
             public_key: alice_keypair.public_key.clone(),
@@ -96,12 +99,15 @@ fn main() {
     println!("  Hash: {}", tx1.hash());
     println!("");
 
-    // Create Block 1
+    // Create Block 1 with coinbase + transaction
+    let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
+    let block1_coinbase = Transaction::new_coinbase(miner_address, 55); // 50 reward + 5 fee
+
     let block_1 = Block::new(
         1,
         genesis_hash,
         1000100,
-        vec![tx1.clone()],
+        vec![block1_coinbase.clone(), tx1.clone()],
         miner_keypair.public_key.clone(),
         Signature::sign_output(&Hash::hash(b"block_1_data"), &miner_keypair.private_key),
     );
@@ -112,7 +118,11 @@ fn main() {
     println!("  Index: {}", block_1.index);
     println!("  Hash: {}", block_1_hash);
     println!("  Prev Hash: {}", block_1.prev_block_hash);
-    println!("  Transactions: {}", block_1.transactions.len());
+    println!(
+        "  Transactions: {} (1 coinbase + 1 regular)",
+        block_1.transactions.len()
+    );
+    println!("  Miner reward: 55 coins (50 base + 5 fee)");
     println!("");
 
     // Validate Block 1
@@ -164,11 +174,12 @@ fn main() {
 
     // Test 1: Block with wrong prev_hash
     println!("Test 1: Block with wrong prev_hash");
+    let test_coinbase = Transaction::new_coinbase(miner_address, 50);
     let invalid_block_1 = Block::new(
         2,
         Hash::zero(),
         1000200,
-        vec![],
+        vec![test_coinbase],
         miner_keypair.public_key.clone(),
         Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
     );
@@ -184,11 +195,12 @@ fn main() {
 
     // Test 2: Block with duplicate transactions
     println!("Test 2: Block with duplicate transactions");
+    let dup_coinbase = Transaction::new_coinbase(miner_address, 50);
     let invalid_block_2 = Block::new(
         2,
         block_1_hash,
         1000200,
-        vec![tx1.clone(), tx1.clone()],
+        vec![dup_coinbase, tx1.clone(), tx1.clone()],
         miner_keypair.public_key.clone(),
         Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
     );
@@ -236,11 +248,12 @@ fn main() {
         .sign_input(0, &bob_keypair.private_key)
         .expect("Failed to sign");
 
+    let ds_coinbase = Transaction::new_coinbase(miner_address, 50);
     let invalid_block_3 = Block::new(
         2,
         block_1_hash,
         1000200,
-        vec![double_spend_tx1, double_spend_tx2],
+        vec![ds_coinbase, double_spend_tx1, double_spend_tx2],
         miner_keypair.public_key.clone(),
         Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
     );
@@ -255,11 +268,12 @@ fn main() {
 
     // Test 4: Block with wrong hash verification
     println!("Test 4: Block with wrong hash claim");
+    let hash_test_coinbase = Transaction::new_coinbase(miner_address, 50);
     let valid_structure_block = Block::new(
         2,
         block_1_hash,
         1000200,
-        vec![],
+        vec![hash_test_coinbase],
         miner_keypair.public_key.clone(),
         Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
     );
@@ -290,6 +304,25 @@ fn main() {
         println!("PASS (unexpected)");
     } else {
         println!("FAIL (expected - non-zero prev_hash)");
+    }
+    println!("");
+
+    // Test 6: Block with transactions but no coinbase
+    println!("Test 6: Block without coinbase (has regular transactions)");
+    let no_coinbase_block = Block::new(
+        2,
+        block_1_hash,
+        1000200,
+        vec![tx1.clone()],
+        miner_keypair.public_key.clone(),
+        Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+    );
+
+    print!("  Lenient validation (coinbase optional)... ");
+    if no_coinbase_block.are_valid_transactions(&utxo_set) {
+        println!("PASS (allowed without coinbase)");
+    } else {
+        println!("FAIL");
     }
     println!("");
 

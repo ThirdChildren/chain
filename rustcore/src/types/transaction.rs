@@ -39,6 +39,20 @@ impl Transaction {
         Transaction { inputs, outputs }
     }
 
+    /// Create a new coinbase transaction (mining reward)
+    pub fn new_coinbase(recipient: [u8; 20], amount: u64) -> Self {
+        let output = TxOutput { amount, recipient };
+        Transaction {
+            inputs: vec![],
+            outputs: vec![output],
+        }
+    }
+
+    /// Check if this is a coinbase transaction
+    pub fn is_coinbase(&self) -> bool {
+        self.inputs.is_empty() && !self.outputs.is_empty()
+    }
+
     /// Serialization without external libraries
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -126,7 +140,20 @@ impl Transaction {
 
     /// Validate a single transaction
     pub fn validate(&self, utxo_set: &UTXOSet) -> Result<(), ValidationError> {
-        if self.inputs.is_empty() || self.outputs.is_empty() {
+        if self.outputs.is_empty() {
+            return Err(ValidationError::EmptyTransaction);
+        }
+
+        if self.is_coinbase() {
+            for output in &self.outputs {
+                if output.amount == 0 {
+                    return Err(ValidationError::InvalidAmount);
+                }
+            }
+            return Ok(());
+        }
+
+        if self.inputs.is_empty() {
             return Err(ValidationError::EmptyTransaction);
         }
 
@@ -184,16 +211,21 @@ impl Transaction {
 
         let tx_hash = self.hash();
 
-        for input in &self.inputs {
-            let utxo_key = (
-                Hash::from_bytes_array(input.previous_tx_id),
-                input.output_index,
-            );
-            if utxo_set.remove(&utxo_key).is_none() {
-                return Err(ValidationError::DoubleSpend);
+        // For regular transactions, remove spent inputs
+        // Coinbase transactions have no inputs to remove
+        if !self.is_coinbase() {
+            for input in &self.inputs {
+                let utxo_key = (
+                    Hash::from_bytes_array(input.previous_tx_id),
+                    input.output_index,
+                );
+                if utxo_set.remove(&utxo_key).is_none() {
+                    return Err(ValidationError::DoubleSpend);
+                }
             }
         }
 
+        // Add new outputs to UTXO set
         for (index, output) in self.outputs.iter().enumerate() {
             let utxo_key = (tx_hash, index as u32);
             utxo_set.insert(utxo_key, output.clone());
@@ -213,6 +245,11 @@ impl Transaction {
 
     /// Calculate transaction fee
     pub fn calculate_fee(&self, utxo_set: &UTXOSet) -> Result<u64, ValidationError> {
+        // Coinbase transactions have no fee
+        if self.is_coinbase() {
+            return Ok(0);
+        }
+
         let mut total_input = 0u64;
         let mut total_output = 0u64;
 
@@ -346,7 +383,7 @@ mod tests {
     fn test_empty_transaction_validation() {
         let utxo_set = UTXOSet::new();
 
-        // Transaction without input
+        // Transaction without input and with output is a valid coinbase
         let tx_no_inputs = Transaction::new(
             vec![],
             vec![TxOutput {
@@ -354,10 +391,9 @@ mod tests {
                 recipient: [1u8; 20],
             }],
         );
-        assert!(matches!(
-            tx_no_inputs.validate(&utxo_set),
-            Err(ValidationError::EmptyTransaction)
-        ));
+        // This is now a valid coinbase transaction
+        assert!(tx_no_inputs.validate(&utxo_set).is_ok());
+        assert!(tx_no_inputs.is_coinbase());
 
         let alice_private = PrivateKey::new_key();
         let alice_public = alice_private.public_key();
