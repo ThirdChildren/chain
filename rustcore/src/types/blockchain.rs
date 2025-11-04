@@ -102,7 +102,7 @@ impl Blockchain {
 mod tests {
     use super::*;
     use crate::crypto::{Hash, KeyPair, Signature};
-    use crate::types::{Block, Transaction};
+    use crate::types::{Block, Transaction, TxInput, TxOutput};
 
     #[test]
     fn test_create_blockchain() {
@@ -112,7 +112,7 @@ mod tests {
         // Create a coinbase transaction for the genesis block
         let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
 
-        // Create genesis block with coinbase transaction
+        // Create genesis block
         let genesis_block = Block::new(
             0,
             Hash::zero(),
@@ -128,5 +128,72 @@ mod tests {
         assert!(!new_blockchain.is_empty());
         assert_eq!(new_blockchain.height(), 1);
         assert_eq!(new_blockchain.id, blockchain_id);
+    }
+
+    #[test]
+    fn test_adding_block() {
+        let alice_keypair = KeyPair::generate();
+        let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
+
+        let bob_keypair = KeyPair::generate();
+        let bob_address = Transaction::public_key_to_address(&bob_keypair.public_key);
+
+        let miner_keypair = KeyPair::generate();
+        let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
+
+        // Genesis coinbase gives 100 coins to Alice
+        let coinbase_tx = Transaction::new_coinbase(alice_address, 100);
+
+        let genesis_block = Block::new(
+            0,
+            Hash::zero(),
+            1000000,
+            vec![coinbase_tx.clone()],
+            miner_keypair.public_key.clone(),
+            Signature::sign_output(&Hash::zero(), &miner_keypair.private_key),
+        );
+
+        let blockchain_id = "test_blockchain_001".to_string();
+        let mut new_blockchain =
+            Blockchain::new_blockchain(blockchain_id.clone(), genesis_block.clone()).unwrap();
+
+        // Create Transaction 1: Alice sends 30 to Bob, keeps 65 as change, 5 as fee
+        let genesis_coinbase_hash = coinbase_tx.hash();
+        let mut tx1 = Transaction::new(
+            vec![TxInput {
+                previous_tx_id: genesis_coinbase_hash.as_bytes(),
+                output_index: 0,
+                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
+                public_key: alice_keypair.public_key.clone(),
+            }],
+            vec![
+                TxOutput {
+                    amount: 30,
+                    recipient: bob_address,
+                },
+                TxOutput {
+                    amount: 65,
+                    recipient: alice_address,
+                },
+            ],
+        );
+
+        tx1.sign_input(0, &alice_keypair.private_key)
+            .expect("Failed to sign transaction");
+
+        // Create Block 1 with coinbase + transaction
+        let new_block_coinbase = Transaction::new_coinbase(miner_address, 55); // 50 reward + 5 fee
+
+        let new_block = Block::new(
+            1,
+            genesis_block.hash(),
+            1000100,
+            vec![new_block_coinbase.clone(), tx1.clone()],
+            miner_keypair.public_key.clone(),
+            Signature::sign_output(&Hash::hash(b"new_block_data"), &miner_keypair.private_key),
+        );
+
+        new_blockchain.add_block(new_block).unwrap();
+        assert_eq!(new_blockchain.height(), 2);
     }
 }
