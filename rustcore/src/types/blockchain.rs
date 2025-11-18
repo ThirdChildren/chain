@@ -1,7 +1,7 @@
 use crate::crypto::Hash;
 use crate::types::block::BlockValidationError;
 use crate::types::{Block, Transaction, UTXOSet, UtxoRef};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub enum ValidationError {
@@ -146,29 +146,47 @@ impl Blockchain {
 
     /// Validate all transactions in a block
     /// This validates transaction semantics, not structure (structure is validated by Block)
-    /// Uses a temporary UTXO set to validate all transactions before applying
+    /// Tracks spent/created UTXOs to avoid cloning entire UTXO set
     fn validate_block_transactions(&self, block: &Block) -> Result<(), ValidationError> {
-        // Clone UTXO set for validation (will be discarded after)
-        let mut temp_utxo = self.utxo_set.clone();
+        let mut spent_utxos = HashSet::new();
+        let mut created_utxos = HashMap::new();
 
-        // Validate each transaction against temporary UTXO set
+        // Validate each transaction
         for tx in block.transactions.iter() {
-            // Validate transaction semantics
-            Self::validate_transaction_against_utxo(tx, &temp_utxo)?;
+            // Validate transaction semantics (signatures, amounts, etc.)
+            // This also checks for double-spends within the block
+            Self::validate_transaction_with_context(
+                tx,
+                &self.utxo_set,
+                &spent_utxos,
+                &created_utxos,
+            )?;
 
-            // Apply transaction to temporary UTXO set for next transaction validation
-            temp_utxo
-                .apply_transaction(tx)
-                .map_err(|_| ValidationError::DoubleSpend)?;
+            // Track spent UTXOs for subsequent transactions in this block
+            if !tx.is_coinbase() {
+                for input in &tx.inputs {
+                    let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
+                    spent_utxos.insert(utxo_ref);
+                }
+            }
+
+            // Track newly created UTXOs for subsequent transactions in this block
+            let tx_hash = tx.hash();
+            for (index, output) in tx.outputs.iter().enumerate() {
+                let utxo_ref = UtxoRef::new(tx_hash, index as u32);
+                created_utxos.insert(utxo_ref, (output.amount, output.recipient));
+            }
         }
 
         Ok(())
     }
 
-    /// Validate a single transaction against a UTXO set
-    fn validate_transaction_against_utxo(
+    /// Validate a transaction considering block-local UTXO changes
+    fn validate_transaction_with_context(
         tx: &Transaction,
         utxo_set: &UTXOSet,
+        spent_in_block: &HashSet<UtxoRef>,
+        created_in_block: &HashMap<UtxoRef, (u64, [u8; 20])>,
     ) -> Result<(), ValidationError> {
         if tx.outputs.is_empty() {
             return Err(ValidationError::EmptyTransaction);
@@ -196,14 +214,26 @@ impl Blockchain {
         for (i, input) in tx.inputs.iter().enumerate() {
             let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
 
-            // Check if the UTXO exists
-            let referenced_output = utxo_set
-                .get(&utxo_ref)
-                .ok_or(ValidationError::InputNotFound)?;
+            // Check if this UTXO was already spent in this block (double spend)
+            if spent_in_block.contains(&utxo_ref) {
+                return Err(ValidationError::InputNotFound);
+            }
+
+            // Get the referenced output, considering block-local changes
+            let (amount, recipient) = if let Some(&(amt, rcpt)) = created_in_block.get(&utxo_ref) {
+                // UTXO was created earlier in this block
+                (amt, rcpt)
+            } else {
+                // UTXO should exist in main set
+                let referenced_output = utxo_set
+                    .get(&utxo_ref)
+                    .ok_or(ValidationError::InputNotFound)?;
+                (referenced_output.amount, referenced_output.recipient)
+            };
 
             // Check that the recipient of the previous output matches the public key
             let public_key_hash = Transaction::public_key_to_address(&input.public_key);
-            if public_key_hash != referenced_output.recipient {
+            if public_key_hash != recipient {
                 return Err(ValidationError::InvalidSignature);
             }
 
@@ -214,7 +244,7 @@ impl Blockchain {
             }
 
             total_input_amount = total_input_amount
-                .checked_add(referenced_output.amount)
+                .checked_add(amount)
                 .ok_or(ValidationError::InvalidAmount)?;
         }
 
@@ -236,6 +266,7 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Validate a single transaction against a UTXO set
     /// Apply transaction to UTXO set (static method for reuse)
 
     /// Apply all transactions in a block to the blockchain's UTXO set
