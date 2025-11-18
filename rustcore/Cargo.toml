@@ -4,16 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["mldsa", "blake3"]
+default = ["secp256k1", "sha256"]
 # Signature backends
 secp256k1 = ["dep:k256", "dep:ecdsa"]
 mldsa = ["dep:pqcrypto-dilithium", "dep:pqcrypto-traits"]
 # Hash backends
 blake3 = ["dep:blake3"]
+sha256 = ["dep:sha2"]
 # Future crypto backends can be added here
 # ed25519 = ["dep:ed25519-dalek"]
 # rsa = ["dep:rsa"]
-# sha256 = ["dep:sha2"]
 # sha3 = ["dep:sha3"]
 
 [dependencies]
@@ -32,7 +32,7 @@ pqcrypto-traits = { version = "0.3", optional = true }
 
 # Hash backends (feature-gated)
 blake3 = { version = "=1.8.2", optional = true }
-# sha2 = { version = "0.10", optional = true }
+sha2 = { version = "0.10", optional = true }
 # sha3 = { version = "0.10", optional = true }
 
 [[example]]

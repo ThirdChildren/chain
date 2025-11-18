@@ -8,6 +8,9 @@ pub use hash::{DefaultHash, DefaultHashBackend, DefaultHasher};
 #[cfg(feature = "blake3")]
 pub use hash::{Blake3Backend, Blake3Hash, Blake3Hasher};
 
+#[cfg(feature = "sha256")]
+pub use hash::{Sha256Backend, Sha256CryptoHasher, Sha256Hash};
+
 // Re-export signature types
 pub use signature::{
     CryptoBackend, CryptoKey, CryptoSignature, KeyPair, PrivateKey, PublicKey, Signature,

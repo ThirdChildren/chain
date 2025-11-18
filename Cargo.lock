@@ -451,6 +451,7 @@ dependencies = [
  "pqcrypto-dilithium",
  "pqcrypto-traits",
  "rand",
+ "sha2",
  "uint",
  "uuid",
 ]
