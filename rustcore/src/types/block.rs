@@ -1,4 +1,4 @@
-use crate::crypto::backend::CryptoKey;
+use crate::crypto::signature::backend::CryptoKey;
 use crate::crypto::{Hash, PublicKey, Signature};
 use crate::types::transaction::Transaction;
 use std::collections::HashSet;

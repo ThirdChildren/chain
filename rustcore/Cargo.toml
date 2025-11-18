@@ -4,27 +4,36 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["secp256k1"]
+default = ["mldsa", "blake3"]
+# Signature backends
 secp256k1 = ["dep:k256", "dep:ecdsa"]
 mldsa = ["dep:pqcrypto-dilithium", "dep:pqcrypto-traits"]
+# Hash backends
+blake3 = ["dep:blake3"]
 # Future crypto backends can be added here
 # ed25519 = ["dep:ed25519-dalek"]
 # rsa = ["dep:rsa"]
+# sha256 = ["dep:sha2"]
+# sha3 = ["dep:sha3"]
 
 [dependencies]
-"blake3" = "=1.8.2"
 hex = "0.4.3"
 rand = "0.8"
 uint = "0.10.0"
 uuid = { version = "1.17.0", features = ["v4"] }
 
-# Crypto backends (feature-gated)
+# Signature backends (feature-gated)
 ecdsa = { version = "0.16.9", features = ["signing", "verifying"], optional = true }
 k256 = { version = "0.13.4", optional = true }
 pqcrypto-dilithium = { version = "0.5", optional = true }
 pqcrypto-traits = { version = "0.3", optional = true }
 # ed25519-dalek = { version = "2.0", optional = true }
 # rsa = { version = "0.9", optional = true }
+
+# Hash backends (feature-gated)
+blake3 = { version = "=1.8.2", optional = true }
+# sha2 = { version = "0.10", optional = true }
+# sha3 = { version = "0.10", optional = true }
 
 [[example]]
 name = "transaction_validation"

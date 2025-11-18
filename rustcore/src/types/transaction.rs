@@ -1,4 +1,4 @@
-use crate::crypto::backend::CryptoKey;
+use crate::crypto::signature::backend::CryptoKey;
 use crate::crypto::{Hash, PrivateKey, PublicKey, Signature};
 use crate::types::utxo::UTXOSet;
 

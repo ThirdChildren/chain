@@ -1,8 +1,11 @@
+use super::backend::CryptoHasher;
+use super::default::{DefaultHash, DefaultHasher};
 use crate::U256;
 use std::fmt;
 
+/// Main Hash type that uses the default backend
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Hash(U256);
+pub struct Hash(DefaultHash);
 
 /// Trait for types that can be hashed
 pub trait Hashable {
@@ -76,8 +79,9 @@ impl Hashable for Hash {
     }
 }
 
+/// Hasher that uses the default backend
 pub struct Hasher {
-    inner: blake3::Hasher,
+    inner: DefaultHasher,
 }
 
 impl Default for Hasher {
@@ -89,21 +93,7 @@ impl Default for Hasher {
 impl Hasher {
     pub fn new() -> Self {
         Self {
-            inner: blake3::Hasher::new(),
-        }
-    }
-
-    /// Create a hasher with a custom key (for HMAC-like usage)
-    pub fn new_keyed(key: &[u8; 32]) -> Self {
-        Self {
-            inner: blake3::Hasher::new_keyed(key),
-        }
-    }
-
-    /// Create a hasher for key derivation
-    pub fn new_derive_key(context: &str) -> Self {
-        Self {
-            inner: blake3::Hasher::new_derive_key(context),
+            inner: DefaultHasher::new(),
         }
     }
 
@@ -114,15 +104,7 @@ impl Hasher {
     }
 
     pub fn finalize(self) -> Hash {
-        let hash = self.inner.finalize();
-        let hash_bytes = hash.as_bytes();
-        let hash_array: [u8; 32] = hash_bytes.as_slice().try_into().unwrap();
-        Hash(U256::from_little_endian(&hash_array))
-    }
-
-    pub fn finalize_bytes(self) -> [u8; 32] {
-        let hash = self.inner.finalize();
-        *hash.as_bytes()
+        Hash(self.inner.finalize())
     }
 
     pub fn reset(&mut self) {
@@ -133,34 +115,32 @@ impl Hasher {
 impl Hash {
     /// Create a hash from a 32-byte array directly (for transaction IDs)
     pub fn from_bytes_array(bytes: [u8; 32]) -> Self {
-        Hash(U256::from_little_endian(&bytes))
+        Hash(DefaultHash::from_bytes_array(bytes))
     }
 
     /// Create a hash from a U256 value directly
     pub fn from_u256(value: U256) -> Self {
-        Hash(value)
+        Hash(DefaultHash::from_u256(value))
     }
 
     /// Check if hash meets target difficulty
     pub fn matches_target(&self, target: U256) -> bool {
-        self.0 <= target
+        self.0.matches_target(target)
     }
 
     /// Create a zero hash
     pub fn zero() -> Self {
-        Hash(U256::zero())
+        Hash(DefaultHash::zero())
     }
 
     /// Get the inner U256 value
     pub fn as_u256(&self) -> U256 {
-        self.0
+        self.0.as_u256()
     }
 
     /// Convert hash to bytes array
     pub fn as_bytes(&self) -> [u8; 32] {
-        let mut bytes: Vec<u8> = vec![0; 32];
-        self.0.write_as_little_endian(&mut bytes);
-        bytes.as_slice().try_into().unwrap()
+        self.0.as_bytes()
     }
 
     /// Hash function base
@@ -192,7 +172,7 @@ impl Hash {
 
 impl fmt::Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:x}", self.0)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -241,61 +221,6 @@ mod tests {
         });
 
         assert_eq!(hash1, hash2);
-    }
-
-    #[test]
-    fn test_hasher_keyed() {
-        let key = [42u8; 32];
-        let mut hasher1 = Hasher::new_keyed(&key);
-        hasher1.input(b"authenticated data");
-        let hash1 = hasher1.finalize();
-
-        let mut hasher2 = Hasher::new_keyed(&key);
-        hasher2.input(b"authenticated data");
-        let hash2 = hasher2.finalize();
-
-        assert_eq!(hash1, hash2);
-
-        let different_key = [24u8; 32];
-        let mut hasher3 = Hasher::new_keyed(&different_key);
-        hasher3.input(b"authenticated data");
-        let hash3 = hasher3.finalize();
-
-        assert_ne!(hash1, hash3);
-    }
-
-    #[test]
-    fn test_hasher_derive_key() {
-        let mut hasher1 = Hasher::new_derive_key("context1");
-        hasher1.input(b"input data");
-        let derived1 = hasher1.finalize();
-
-        let mut hasher2 = Hasher::new_derive_key("context1");
-        hasher2.input(b"input data");
-        let derived2 = hasher2.finalize();
-
-        assert_eq!(derived1, derived2);
-
-        let mut hasher3 = Hasher::new_derive_key("context2");
-        hasher3.input(b"input data");
-        let derived3 = hasher3.finalize();
-
-        assert_ne!(derived1, derived3);
-    }
-
-    #[test]
-    fn test_hasher_finalize_bytes() {
-        let mut hasher = Hasher::new();
-        hasher.input(b"test data");
-        let bytes = hasher.finalize_bytes();
-
-        assert_eq!(bytes.len(), 32);
-
-        let mut hasher2 = Hasher::new();
-        hasher2.input(b"test data");
-        let hash = hasher2.finalize();
-
-        assert_eq!(bytes, hash.as_bytes());
     }
 
     #[test]
