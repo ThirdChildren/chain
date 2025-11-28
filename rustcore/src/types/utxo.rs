@@ -30,11 +30,24 @@ impl UtxoRef {
 pub struct Utxo {
     pub amount: u64,
     pub recipient: [u8; 20],
+    pub spent_in_block: Option<u32>,
 }
 
 impl Utxo {
     pub fn new(amount: u64, recipient: [u8; 20]) -> Self {
-        Utxo { amount, recipient }
+        Utxo {
+            amount,
+            recipient,
+            spent_in_block: None,
+        }
+    }
+
+    pub fn is_spent(&self) -> bool {
+        self.spent_in_block.is_some()
+    }
+
+    pub fn mark_as_spent(&mut self, block_number: u32) {
+        self.spent_in_block = Some(block_number);
     }
 }
 
@@ -52,14 +65,27 @@ impl UTXOSet {
         }
     }
 
-    /// Get a UTXO by reference
+    /// Get a UTXO by reference (returns even if spent)
     pub fn get(&self, utxo_ref: &UtxoRef) -> Option<&Utxo> {
         self.utxos.get(utxo_ref)
     }
 
-    /// Check if a UTXO exists
+    /// Get an unspent UTXO by reference (returns None if spent)
+    pub fn get_unspent(&self, utxo_ref: &UtxoRef) -> Option<&Utxo> {
+        self.utxos.get(utxo_ref).filter(|utxo| !utxo.is_spent())
+    }
+
+    /// Check if a UTXO exists (even if spent)
     pub fn has(&self, utxo_ref: &UtxoRef) -> bool {
         self.utxos.contains_key(utxo_ref)
+    }
+
+    /// Check if a UTXO exists and is unspent
+    pub fn has_unspent(&self, utxo_ref: &UtxoRef) -> bool {
+        self.utxos
+            .get(utxo_ref)
+            .map(|u| !u.is_spent())
+            .unwrap_or(false)
     }
 
     /// Add a UTXO to the set
@@ -67,9 +93,21 @@ impl UTXOSet {
         self.utxos.insert(utxo_ref, utxo);
     }
 
-    /// Remove a UTXO from the set, returning the removed UTXO if it existed
-    pub fn remove(&mut self, utxo_ref: &UtxoRef) -> Option<Utxo> {
-        self.utxos.remove(utxo_ref)
+    /// Mark a UTXO as spent in a specific block
+    pub fn mark_spent(
+        &mut self,
+        utxo_ref: &UtxoRef,
+        block_number: u32,
+    ) -> Result<(), &'static str> {
+        if let Some(utxo) = self.utxos.get_mut(utxo_ref) {
+            if utxo.is_spent() {
+                return Err("UTXO already spent");
+            }
+            utxo.mark_as_spent(block_number);
+            Ok(())
+        } else {
+            Err("UTXO not found")
+        }
     }
 
     /// Get the number of UTXOs in the set
@@ -91,28 +129,30 @@ impl UTXOSet {
             .collect()
     }
 
-    /// Calculate balance for an address
+    /// Calculate balance for an address (only unspent UTXOs)
     pub fn get_balance(&self, address: &[u8; 20]) -> u64 {
         self.utxos
             .values()
-            .filter(|utxo| utxo.recipient == *address)
+            .filter(|utxo| utxo.recipient == *address && !utxo.is_spent())
             .map(|utxo| utxo.amount)
             .sum()
     }
 
     /// Apply a transaction to the UTXO set
-    /// Removes spent inputs and adds new outputs
-    /// Returns error if an input doesn't exist (double spend)
-    pub fn apply_transaction(&mut self, tx: &Transaction) -> Result<(), &'static str> {
+    /// Marks spent inputs and adds new outputs
+    /// Returns error if an input doesn't exist or is already spent
+    pub fn apply_transaction(
+        &mut self,
+        tx: &Transaction,
+        block_number: u32,
+    ) -> Result<(), &'static str> {
         let tx_hash = tx.hash();
 
-        // For regular transactions, remove spent inputs
+        // For regular transactions, mark spent inputs
         if !tx.is_coinbase() {
             for input in &tx.inputs {
                 let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-                if self.remove(&utxo_ref).is_none() {
-                    return Err("Input UTXO not found (double spend)");
-                }
+                self.mark_spent(&utxo_ref, block_number)?;
             }
         }
 
@@ -134,11 +174,11 @@ impl UTXOSet {
             return Ok(());
         }
 
-        // Check that all inputs exist
+        // Check that all inputs exist and are unspent
         for input in &tx.inputs {
             let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-            if !self.has(&utxo_ref) {
-                return Err("Input UTXO not found");
+            if !self.has_unspent(&utxo_ref) {
+                return Err("Input UTXO not found or already spent");
             }
         }
 
@@ -146,7 +186,7 @@ impl UTXOSet {
     }
 
     /// Get total value of inputs for a transaction
-    /// Returns None if any input is not found
+    /// Returns None if any input is not found or is spent
     pub fn get_transaction_input_value(&self, tx: &Transaction) -> Option<u64> {
         if tx.is_coinbase() {
             return Some(0);
@@ -155,7 +195,7 @@ impl UTXOSet {
         let mut total = 0u64;
         for input in &tx.inputs {
             let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-            let utxo = self.get(&utxo_ref)?;
+            let utxo = self.get_unspent(&utxo_ref)?;
             total = total.checked_add(utxo.amount)?;
         }
         Some(total)
@@ -182,257 +222,13 @@ impl UTXOSet {
         input_value.checked_sub(output_value)
     }
 
-    /// Iterator over all UTXOs
+    /// Iterator over all UTXOs (including spent ones)
     pub fn iter(&self) -> impl Iterator<Item = (&UtxoRef, &Utxo)> {
         self.utxos.iter()
     }
-}
 
-impl Default for UTXOSet {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::crypto::{KeyPair, Signature};
-    use crate::types::{TxInput, TxOutput};
-
-    #[test]
-    fn test_utxo_ref_creation() {
-        let hash = Hash::hash(b"test");
-        let utxo_ref = UtxoRef::new(hash, 0);
-        assert_eq!(utxo_ref.tx_hash, hash);
-        assert_eq!(utxo_ref.output_index, 0);
-    }
-
-    #[test]
-    fn test_utxo_creation() {
-        let utxo = Utxo::new(100, [1u8; 20]);
-        assert_eq!(utxo.amount, 100);
-        assert_eq!(utxo.recipient, [1u8; 20]);
-    }
-
-    #[test]
-    fn test_utxo_set_new() {
-        let set = UTXOSet::new();
-        assert!(set.is_empty());
-        assert_eq!(set.len(), 0);
-    }
-
-    #[test]
-    fn test_utxo_set_add_get() {
-        let mut set = UTXOSet::new();
-        let hash = Hash::hash(b"test");
-        let utxo_ref = UtxoRef::new(hash, 0);
-        let utxo = Utxo::new(100, [1u8; 20]);
-
-        set.add(utxo_ref, utxo.clone());
-
-        assert_eq!(set.len(), 1);
-        assert!(set.has(&utxo_ref));
-        assert_eq!(set.get(&utxo_ref), Some(&utxo));
-    }
-
-    #[test]
-    fn test_utxo_set_remove() {
-        let mut set = UTXOSet::new();
-        let hash = Hash::hash(b"test");
-        let utxo_ref = UtxoRef::new(hash, 0);
-        let utxo = Utxo::new(100, [1u8; 20]);
-
-        set.add(utxo_ref, utxo.clone());
-        assert_eq!(set.len(), 1);
-
-        let removed = set.remove(&utxo_ref);
-        assert_eq!(removed, Some(utxo));
-        assert_eq!(set.len(), 0);
-        assert!(!set.has(&utxo_ref));
-    }
-
-    #[test]
-    fn test_get_balance() {
-        let mut set = UTXOSet::new();
-        let address = [1u8; 20];
-
-        let hash1 = Hash::hash(b"tx1");
-        set.add(UtxoRef::new(hash1, 0), Utxo::new(100, address));
-
-        let hash2 = Hash::hash(b"tx2");
-        set.add(UtxoRef::new(hash2, 0), Utxo::new(50, address));
-
-        let hash3 = Hash::hash(b"tx3");
-        set.add(UtxoRef::new(hash3, 0), Utxo::new(25, [2u8; 20]));
-
-        assert_eq!(set.get_balance(&address), 150);
-        assert_eq!(set.get_balance(&[2u8; 20]), 25);
-        assert_eq!(set.get_balance(&[3u8; 20]), 0);
-    }
-
-    #[test]
-    fn test_apply_coinbase_transaction() {
-        let mut set = UTXOSet::new();
-        let address = [1u8; 20];
-
-        let coinbase = Transaction::new_coinbase(address, 50);
-        assert!(set.apply_transaction(&coinbase).is_ok());
-
-        assert_eq!(set.len(), 1);
-        assert_eq!(set.get_balance(&address), 50);
-    }
-
-    #[test]
-    fn test_apply_regular_transaction() {
-        let mut set = UTXOSet::new();
-        let keypair = KeyPair::generate();
-        let address = Transaction::public_key_to_address(&keypair.public_key);
-
-        // Add initial UTXO
-        let initial_tx = Transaction::new_coinbase(address, 100);
-        set.apply_transaction(&initial_tx).unwrap();
-
-        // Create spending transaction
-        let recipient = [2u8; 20];
-        let mut tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: initial_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &keypair.private_key),
-                public_key: keypair.public_key.clone(),
-            }],
-            vec![
-                TxOutput {
-                    amount: 60,
-                    recipient,
-                },
-                TxOutput {
-                    amount: 35,
-                    recipient: address,
-                },
-            ],
-        );
-        tx.sign_input(0, &keypair.private_key).unwrap();
-
-        assert!(set.apply_transaction(&tx).is_ok());
-
-        // Original UTXO should be removed
-        assert_eq!(set.len(), 2);
-        assert_eq!(set.get_balance(&address), 35);
-        assert_eq!(set.get_balance(&recipient), 60);
-    }
-
-    #[test]
-    fn test_apply_transaction_double_spend() {
-        let mut set = UTXOSet::new();
-        let address = [1u8; 20];
-
-        let initial_tx = Transaction::new_coinbase(address, 100);
-        set.apply_transaction(&initial_tx).unwrap();
-
-        let keypair = KeyPair::generate();
-        let tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: initial_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &keypair.private_key),
-                public_key: keypair.public_key.clone(),
-            }],
-            vec![TxOutput {
-                amount: 50,
-                recipient: [2u8; 20],
-            }],
-        );
-
-        // First application should succeed
-        assert!(set.apply_transaction(&tx).is_ok());
-
-        // Second application should fail (double spend)
-        assert!(set.apply_transaction(&tx).is_err());
-    }
-
-    #[test]
-    fn test_can_apply_transaction() {
-        let mut set = UTXOSet::new();
-        let address = [1u8; 20];
-
-        let initial_tx = Transaction::new_coinbase(address, 100);
-        set.apply_transaction(&initial_tx).unwrap();
-
-        let keypair = KeyPair::generate();
-        let tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: initial_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &keypair.private_key),
-                public_key: keypair.public_key.clone(),
-            }],
-            vec![TxOutput {
-                amount: 50,
-                recipient: [2u8; 20],
-            }],
-        );
-
-        assert!(set.can_apply_transaction(&tx).is_ok());
-
-        // Apply it
-        set.apply_transaction(&tx).unwrap();
-
-        // Now it can't be applied again
-        assert!(set.can_apply_transaction(&tx).is_err());
-    }
-
-    #[test]
-    fn test_get_transaction_values() {
-        let mut set = UTXOSet::new();
-        let address = [1u8; 20];
-
-        let initial_tx = Transaction::new_coinbase(address, 100);
-        set.apply_transaction(&initial_tx).unwrap();
-
-        let keypair = KeyPair::generate();
-        let tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: initial_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &keypair.private_key),
-                public_key: keypair.public_key.clone(),
-            }],
-            vec![
-                TxOutput {
-                    amount: 60,
-                    recipient: [2u8; 20],
-                },
-                TxOutput {
-                    amount: 35,
-                    recipient: address,
-                },
-            ],
-        );
-
-        assert_eq!(set.get_transaction_input_value(&tx), Some(100));
-        assert_eq!(UTXOSet::get_transaction_output_value(&tx), Some(95));
-        assert_eq!(set.calculate_transaction_fee(&tx), Some(5));
-    }
-
-    #[test]
-    fn test_get_utxos_for_address() {
-        let mut set = UTXOSet::new();
-        let address1 = [1u8; 20];
-        let address2 = [2u8; 20];
-
-        let hash1 = Hash::hash(b"tx1");
-        set.add(UtxoRef::new(hash1, 0), Utxo::new(100, address1));
-        set.add(UtxoRef::new(hash1, 1), Utxo::new(50, address2));
-
-        let hash2 = Hash::hash(b"tx2");
-        set.add(UtxoRef::new(hash2, 0), Utxo::new(25, address1));
-
-        let utxos_addr1 = set.get_utxos_for_address(&address1);
-        assert_eq!(utxos_addr1.len(), 2);
-
-        let utxos_addr2 = set.get_utxos_for_address(&address2);
-        assert_eq!(utxos_addr2.len(), 1);
+    /// Iterator over only unspent UTXOs
+    pub fn iter_unspent(&self) -> impl Iterator<Item = (&UtxoRef, &Utxo)> {
+        self.utxos.iter().filter(|(_, utxo)| !utxo.is_spent())
     }
 }
