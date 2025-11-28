@@ -57,7 +57,6 @@ impl Blockchain {
 
     /// Validate genesis block
     fn validate_and_add_genesis(&mut self, block: Block) -> Result<(), ValidationError> {
-        // Validate genesis block structure (index, prev_hash, hash, transaction structure)
         block
             .validate_genesis_structure()
             .map_err(ValidationError::BlockStructureError)?;
@@ -66,7 +65,7 @@ impl Blockchain {
         self.validate_block_transactions(&block)?;
 
         // Apply transactions to UTXO set
-        self.apply_block_to_utxo(&block)?;
+        self.apply_block_to_utxo(&block);
 
         // Add block
         let block_hash = block.hash();
@@ -76,85 +75,25 @@ impl Blockchain {
         Ok(())
     }
 
-    /// Validate a transaction against current UTXO set
+    /// Validate a single transaction against the current blockchain state
+    /// Used for mempool validation (single transactions)
     pub fn validate_transaction(&self, tx: &Transaction) -> Result<(), ValidationError> {
-        if tx.outputs.is_empty() {
-            return Err(ValidationError::EmptyTransaction);
-        }
+        // Use the full validation with empty block context
+        let empty_spent = HashSet::new();
+        let empty_created = HashMap::new();
 
-        // Validate coinbase transaction
-        if tx.is_coinbase() {
-            for output in &tx.outputs {
-                if output.amount == 0 {
-                    return Err(ValidationError::InvalidAmount);
-                }
-            }
-            return Ok(());
-        }
-
-        // Regular transaction must have inputs
-        if tx.inputs.is_empty() {
-            return Err(ValidationError::EmptyTransaction);
-        }
-
-        let mut total_input_amount = 0u64;
-        let mut total_output_amount = 0u64;
-
-        // Validate each input
-        for (i, input) in tx.inputs.iter().enumerate() {
-            // Check if the UTXO exists
-            let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-            let referenced_output = self
-                .utxo_set
-                .get(&utxo_ref)
-                .ok_or(ValidationError::InputNotFound)?;
-
-            // Check that the recipient of the previous output matches the public key
-            let public_key_hash = Transaction::public_key_to_address(&input.public_key);
-            if public_key_hash != referenced_output.recipient {
-                return Err(ValidationError::InvalidSignature);
-            }
-
-            // Check the signature
-            let sig_hash = tx.signature_hash(i);
-            if !input.signature.verify(&sig_hash, &input.public_key) {
-                return Err(ValidationError::InvalidSignature);
-            }
-
-            total_input_amount = total_input_amount
-                .checked_add(referenced_output.amount)
-                .ok_or(ValidationError::InvalidAmount)?;
-        }
-
-        // Validate outputs
-        for output in &tx.outputs {
-            if output.amount == 0 {
-                return Err(ValidationError::InvalidAmount);
-            }
-            total_output_amount = total_output_amount
-                .checked_add(output.amount)
-                .ok_or(ValidationError::InvalidAmount)?;
-        }
-
-        // Check that input >= output (fees go to the miner)
-        if total_input_amount < total_output_amount {
-            return Err(ValidationError::InsufficientFunds);
-        }
-
-        Ok(())
+        Self::validate_transaction_with_context(tx, &self.utxo_set, &empty_spent, &empty_created)
     }
 
-    /// Validate all transactions in a block
-    /// This validates transaction semantics, not structure (structure is validated by Block)
-    /// Tracks spent/created UTXOs to avoid cloning entire UTXO set
+    /// Validate all transactions in a block WITHOUT modifying UTXO set.
+    /// This validates transaction semantics, not structure (structure is validated by Block).
     fn validate_block_transactions(&self, block: &Block) -> Result<(), ValidationError> {
+        // Track spent and created UTXOs within this block
         let mut spent_utxos = HashSet::new();
         let mut created_utxos = HashMap::new();
 
-        // Validate each transaction
+        // Validate each transaction in order
         for tx in block.transactions.iter() {
-            // Validate transaction semantics (signatures, amounts, etc.)
-            // This also checks for double-spends within the block
             Self::validate_transaction_with_context(
                 tx,
                 &self.utxo_set,
@@ -170,7 +109,6 @@ impl Blockchain {
                 }
             }
 
-            // Track newly created UTXOs for subsequent transactions in this block
             let tx_hash = tx.hash();
             for (index, output) in tx.outputs.iter().enumerate() {
                 let utxo_ref = UtxoRef::new(tx_hash, index as u32);
@@ -181,7 +119,10 @@ impl Blockchain {
         Ok(())
     }
 
-    /// Validate a transaction considering block-local UTXO changes
+    /// Core validation logic that considers block-local UTXO changes
+    /// Used for both:
+    /// - Single transaction validation (mempool): with empty context
+    /// - Block transaction validation: with spent/created UTXOs from earlier transactions
     fn validate_transaction_with_context(
         tx: &Transaction,
         utxo_set: &UTXOSet,
@@ -266,20 +207,24 @@ impl Blockchain {
         Ok(())
     }
 
-    /// Validate a single transaction against a UTXO set
-    /// Apply transaction to UTXO set (static method for reuse)
-
     /// Apply all transactions in a block to the blockchain's UTXO set
-    fn apply_block_to_utxo(&mut self, block: &Block) -> Result<(), ValidationError> {
+    fn apply_block_to_utxo(&mut self, block: &Block) {
         for tx in &block.transactions {
             self.utxo_set
                 .apply_transaction(tx)
-                .map_err(|_| ValidationError::DoubleSpend)?;
+                .expect("CRITICAL: apply_transaction failed after validation - this is a bug!");
         }
-        Ok(())
     }
 
     /// Add a new block to the blockchain (idempotent operation)
+    ///
+    /// This operation follows the VALIDATE-THEN-APPLY pattern:
+    /// 1. Validate block structure and all transactions
+    /// 2. Only if ALL validation passes, apply changes to UTXO set atomically
+    /// 3. Add block to chain
+    ///
+    /// This ensures atomicity: either the entire block is accepted or rejected.
+    /// Partial application is impossible.
     pub fn add_block(&mut self, new_block: Block) -> Result<(), ValidationError> {
         // Check if block already exists (idempotent)
         let block_hash = new_block.hash();
@@ -294,16 +239,20 @@ impl Blockchain {
             self.blocks.last().unwrap().hash()
         };
 
+        // PHASE 1: VALIDATION (no state changes)
         // Validate block structure (hash, prev_hash, transaction structure)
         new_block
             .validate_structure(&expected_prev_hash)
             .map_err(ValidationError::BlockStructureError)?;
 
         // Validate transaction semantics (against UTXO set)
+        // This checks all transactions without modifying UTXO set
         self.validate_block_transactions(&new_block)?;
 
-        // Apply transactions to UTXO set
-        self.apply_block_to_utxo(&new_block)?;
+        // PHASE 2: APPLICATION (atomic - all or nothing)
+        // Apply all transactions to UTXO set
+        // This cannot fail if validation passed (otherwise it's a bug)
+        self.apply_block_to_utxo(&new_block);
 
         // Add block to blockchain
         self.block_by_hash.insert(block_hash, self.blocks.len());

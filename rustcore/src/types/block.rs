@@ -49,7 +49,6 @@ impl Block {
     }
 
     /// Create a new block with proper signature over the block hash
-    /// This is a convenience method that creates the block and signs it correctly
     pub fn new_signed(
         index: u32,
         prev_block_hash: Hash,
