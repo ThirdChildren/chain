@@ -2,6 +2,7 @@ use crate::crypto::signature::backend::CryptoKey;
 use crate::crypto::{Hash, PublicKey, Signature};
 use crate::types::transaction::Transaction;
 use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -27,6 +28,14 @@ pub enum BlockValidationError {
 }
 
 impl Block {
+    /// Get current timestamp in milliseconds since UNIX_EPOCH
+    pub fn get_current_timestamp() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis()
+    }
+
     pub fn new(
         index: u32,
         prev_block_hash: Hash,
@@ -216,7 +225,7 @@ mod tests {
         let block = Block::new(
             0,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -234,11 +243,12 @@ mod tests {
 
         let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
         let prev_hash = Hash::zero();
+        let timestamp = Block::get_current_timestamp();
 
         let block1 = Block::new(
             0,
             prev_hash,
-            1000000,
+            timestamp,
             vec![coinbase_tx.clone()],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -247,7 +257,7 @@ mod tests {
         let block2 = Block::new(
             0,
             prev_hash,
-            1000000,
+            timestamp,
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -269,7 +279,7 @@ mod tests {
         let block1 = Block::new(
             0,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx1],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -278,7 +288,7 @@ mod tests {
         let block2 = Block::new(
             0,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx2],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -297,7 +307,7 @@ mod tests {
         let block = Block::new(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -316,7 +326,7 @@ mod tests {
         let block = Block::new(
             0,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -330,7 +340,7 @@ mod tests {
         let mut temp_block = Block::new(
             0,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx2],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -352,7 +362,7 @@ mod tests {
         let block = Block::new(
             1,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -384,7 +394,7 @@ mod tests {
         let block = Block::new_signed(
             1,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx, regular_tx],
             keypair.public_key.clone(),
             &keypair.private_key,
@@ -400,7 +410,7 @@ mod tests {
         let block = Block::new(
             1,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![], // Empty!
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -433,7 +443,7 @@ mod tests {
         let block = Block::new(
             1,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![regular_tx], // No coinbase!
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -456,7 +466,7 @@ mod tests {
         let block = Block::new(
             1,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx1, coinbase_tx2], // Two coinbase!
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -490,7 +500,7 @@ mod tests {
         let block = Block::new(
             1,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx, regular_tx.clone(), regular_tx.clone()], // Duplicate!
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -511,7 +521,7 @@ mod tests {
         let block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             &keypair.private_key,
@@ -529,7 +539,7 @@ mod tests {
         let block = Block::new(
             1, // Should be 0!
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -550,7 +560,7 @@ mod tests {
         let block = Block::new(
             0,
             Hash::hash(b"non_zero"), // Should be zero!
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&Hash::zero(), &keypair.private_key),
@@ -572,7 +582,7 @@ mod tests {
         let block = Block::new_signed(
             1,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             &keypair.private_key,
@@ -592,7 +602,7 @@ mod tests {
         let block = Block::new(
             1,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),
@@ -616,7 +626,7 @@ mod tests {
         let mut block = Block::new(
             1,
             prev_hash,
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             keypair.public_key.clone(),
             Signature::sign_output(&prev_hash, &keypair.private_key),

@@ -36,7 +36,7 @@ fn main() {
     let genesis_block = Block::new_signed(
         0,
         Hash::zero(),
-        1000000,
+        Block::get_current_timestamp(),
         vec![genesis_coinbase.clone()],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -123,7 +123,7 @@ fn main() {
     let block_1 = Block::new_signed(
         1,
         blockchain.blocks[0].hash(),
-        1000100,
+        Block::get_current_timestamp(),
         vec![block_coinbase, tx1.clone()],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -232,7 +232,7 @@ fn main() {
     let block_2 = Block::new_signed(
         2,
         blockchain.blocks[1].hash(),
-        1000200,
+        Block::get_current_timestamp(),
         vec![block_coinbase2, bob_tx],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,

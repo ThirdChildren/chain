@@ -327,7 +327,7 @@ mod tests {
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -357,7 +357,7 @@ mod tests {
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx.clone()],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -394,7 +394,7 @@ mod tests {
         let new_block = Block::new_signed(
             1,
             blockchain.get_block_by_index(0).unwrap().hash(),
-            1000100,
+            Block::get_current_timestamp(),
             vec![new_block_coinbase.clone(), tx1.clone()],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -417,7 +417,7 @@ mod tests {
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx.clone()],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -430,7 +430,7 @@ mod tests {
         let block2 = Block::new_signed(
             1,
             genesis_block.hash(),
-            1000100,
+            Block::get_current_timestamp(),
             vec![coinbase_tx2],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -457,7 +457,7 @@ mod tests {
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx.clone()],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -500,7 +500,7 @@ mod tests {
         let bad_block = Block::new_signed(
             1,
             blockchain.blocks[0].hash(),
-            1000100,
+            Block::get_current_timestamp(),
             vec![coinbase_tx2, tx1, tx2],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -521,7 +521,7 @@ mod tests {
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx.clone()],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
@@ -574,7 +574,7 @@ mod tests {
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
-            1000000,
+            Block::get_current_timestamp(),
             vec![coinbase_tx.clone()],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,

@@ -37,7 +37,7 @@ fn main() {
     let genesis_block = Block::new_signed(
         0,
         Hash::zero(),
-        1000000,
+        Block::get_current_timestamp(),
         vec![genesis_coinbase.clone()],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -123,7 +123,7 @@ fn main() {
     let block_1 = Block::new_signed(
         1,
         genesis_hash,
-        1000100,
+        Block::get_current_timestamp(),
         vec![block1_coinbase.clone(), tx1.clone()],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -193,7 +193,7 @@ fn main() {
     let invalid_block_1 = Block::new_signed(
         2,
         Hash::zero(), // Wrong prev_hash!
-        1000200,
+        Block::get_current_timestamp(),
         vec![test_coinbase],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -227,7 +227,7 @@ fn main() {
     let invalid_block_2 = Block::new_signed(
         2,
         block_1_hash,
-        1000200,
+        Block::get_current_timestamp(),
         vec![dup_coinbase, bob_tx.clone(), bob_tx.clone()], // Duplicate transaction!
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -262,7 +262,7 @@ fn main() {
     let invalid_block_3 = Block::new_signed(
         2,
         block_1_hash,
-        1000200,
+        Block::get_current_timestamp(),
         vec![ds_coinbase, bob_tx, double_spend_tx], // Both spend same UTXO!
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -295,7 +295,7 @@ fn main() {
     let no_coinbase_block = Block::new_signed(
         2,
         block_1_hash,
-        1000200,
+        Block::get_current_timestamp(),
         vec![alice_tx2], // No coinbase!
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -331,7 +331,7 @@ fn main() {
     let invalid_block_5 = Block::new_signed(
         2,
         block_1_hash,
-        1000200,
+        Block::get_current_timestamp(),
         vec![invalid_sig_coinbase, invalid_sig_tx],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
@@ -372,7 +372,7 @@ fn main() {
     let block_2 = Block::new_signed(
         2,
         block_1_hash,
-        1000200,
+        Block::get_current_timestamp(),
         vec![final_coinbase, alice_tx_final],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
