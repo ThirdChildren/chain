@@ -93,6 +93,11 @@ impl UTXOSet {
         self.utxos.insert(utxo_ref, utxo);
     }
 
+    /// Get a mutable reference to a UTXO
+    pub fn get_mut(&mut self, utxo_ref: &UtxoRef) -> Option<&mut Utxo> {
+        self.utxos.get_mut(utxo_ref)
+    }
+
     /// Mark a UTXO as spent in a specific block
     pub fn mark_spent(
         &mut self,
