@@ -30,22 +30,6 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    pub fn new(
-        id: String,
-        mempool: Mempool,
-        utxo_set: UTXOSet,
-        blocks: Vec<Block>,
-        block_by_hash: HashMap<Hash, usize>,
-    ) -> Self {
-        Blockchain {
-            id,
-            mempool,
-            utxo_set,
-            blocks,
-            block_by_hash,
-        }
-    }
-
     pub fn new_blockchain(id: String, genesis_block: Block) -> Result<Self, ValidationError> {
         let mut blockchain = Blockchain {
             id,
@@ -401,15 +385,6 @@ impl Blockchain {
 
     pub fn is_empty(&self) -> bool {
         self.blocks.is_empty()
-    }
-
-    pub fn get_utxo_set(&self) -> &UTXOSet {
-        &self.utxo_set
-    }
-
-    pub fn has_utxo(&self, tx_hash: Hash, output_index: u32) -> bool {
-        let utxo_ref = UtxoRef::new(tx_hash, output_index);
-        self.utxo_set.has_unspent(&utxo_ref)
     }
 
     pub fn get_balance(&self, address: &[u8; 20]) -> u64 {
