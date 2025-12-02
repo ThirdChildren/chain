@@ -1,4 +1,4 @@
-use crate::types::{Transaction, UTXOSet};
+use crate::types::Transaction;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -71,22 +71,14 @@ impl Mempool {
             .as_millis()
     }
 
-    /// Add a transaction to the mempool
-    pub fn add_entry(
-        &mut self,
-        transaction: Transaction,
-        utxo_set: &UTXOSet,
-    ) -> Result<(), MempoolError> {
+    /// Add a transaction to the mempool with a pre-calculated fee
+    pub fn add_entry(&mut self, transaction: Transaction, fee: u64) -> Result<(), MempoolError> {
         // Check 1: Reject coinbase transactions
         if transaction.is_coinbase() {
             return Err(MempoolError::CoinbaseNotAllowed);
         }
 
-        // Check 2: Calculate and validate fee
-        let fee = transaction
-            .calculate_fee(utxo_set)
-            .ok_or(MempoolError::InvalidFee)?;
-
+        // Check 2: Validate fee
         if fee == 0 {
             return Err(MempoolError::InvalidFee);
         }

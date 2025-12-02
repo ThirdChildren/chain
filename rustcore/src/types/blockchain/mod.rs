@@ -1,7 +1,9 @@
-use crate::crypto::Hash;
+use crate::crypto::{Hash, PrivateKey, PublicKey};
 use crate::types::block::BlockValidationError;
 use crate::types::{Block, Mempool, Transaction, UTXOSet, UtxoRef};
 use std::collections::{HashMap, HashSet};
+
+const BLOCK_REWARD: u64 = 50;
 
 #[derive(Debug)]
 pub enum ValidationError {
@@ -15,6 +17,7 @@ pub enum ValidationError {
     InvalidAmount,
     EmptyTransaction,
     BlockStructureError(BlockValidationError),
+    MempoolError(crate::types::MempoolError),
 }
 
 #[derive(Debug, Clone)]
@@ -268,6 +271,83 @@ impl Blockchain {
         }
     }
 
+    /// Create a new block from transactions in the mempool
+    pub fn create_block(
+        &self,
+        miner_public_key: PublicKey,
+        miner_private_key: &PrivateKey,
+        max_transactions: usize,
+    ) -> Block {
+        // Get transactions from mempool ordered by fee (highest first)
+        let candidates = self.mempool.get_transactions_by_fee();
+
+        // Select valid transactions without conflicts
+        let mut selected_transactions = Vec::new();
+        let mut used_utxos = HashSet::new();
+
+        for tx in candidates {
+            if selected_transactions.len() >= max_transactions {
+                break;
+            }
+
+            // Skip if transaction is no longer valid
+            if self.validate_transaction(&tx).is_err() {
+                continue;
+            }
+
+            // Check for conflicts with already selected transactions
+            let tx_inputs: Vec<UtxoRef> = tx
+                .inputs
+                .iter()
+                .map(|input| UtxoRef::from_bytes(input.previous_tx_id, input.output_index))
+                .collect();
+
+            let has_conflict = tx_inputs
+                .iter()
+                .any(|utxo_ref| used_utxos.contains(utxo_ref));
+
+            if !has_conflict {
+                // Mark UTXOs as used
+                for utxo_ref in tx_inputs {
+                    used_utxos.insert(utxo_ref);
+                }
+                selected_transactions.push(tx);
+            }
+        }
+
+        // Calculate total fees from selected transactions
+        let total_fees: u64 = selected_transactions
+            .iter()
+            .filter_map(|tx| self.utxo_set.calculate_transaction_fee(tx))
+            .sum();
+
+        // Create coinbase transaction (reward + fees)
+        let miner_address = Transaction::public_key_to_address(&miner_public_key);
+        let coinbase = Transaction::new_coinbase(miner_address, BLOCK_REWARD + total_fees);
+
+        // Assemble all transactions (coinbase must be first)
+        let mut all_transactions = vec![coinbase];
+        all_transactions.extend(selected_transactions);
+
+        // Determine block parameters
+        let block_index = self.blocks.len() as u32;
+        let prev_hash = if self.is_empty() {
+            Hash::zero()
+        } else {
+            self.blocks.last().unwrap().hash()
+        };
+
+        // Create and sign the block
+        Block::new_signed(
+            block_index,
+            prev_hash,
+            Block::get_current_timestamp(),
+            all_transactions,
+            miner_public_key,
+            miner_private_key,
+        )
+    }
+
     pub fn add_block(&mut self, new_block: Block) -> Result<(), ValidationError> {
         let block_hash = new_block.hash();
         if self.block_by_hash.contains_key(&block_hash) {
@@ -277,6 +357,27 @@ impl Blockchain {
         self.validate_block(&new_block)?;
 
         self.apply_block(&new_block);
+
+        // Remove transactions that are now in the block
+        for tx in &new_block.transactions {
+            if !tx.is_coinbase() {
+                self.mempool.remove_entry(tx);
+            }
+        }
+
+        // Collect transactions that are no longer valid with the new UTXO set
+        let invalid_txs: Vec<_> = self
+            .mempool
+            .entries
+            .iter()
+            .filter(|entry| self.validate_transaction(&entry.transaction).is_err())
+            .map(|entry| entry.transaction.clone())
+            .collect();
+
+        // Remove invalid transactions
+        for tx in invalid_txs {
+            self.mempool.remove_entry(&tx);
+        }
 
         self.block_by_hash.insert(block_hash, self.blocks.len());
         self.blocks.push(new_block);
@@ -313,6 +414,24 @@ impl Blockchain {
 
     pub fn get_balance(&self, address: &[u8; 20]) -> u64 {
         self.utxo_set.get_balance(address)
+    }
+
+    /// Submit a transaction to the mempool
+    pub fn submit_transaction(&mut self, tx: Transaction) -> Result<(), ValidationError> {
+        self.validate_transaction(&tx)?;
+
+        // Calculate the fee using the UTXO set
+        let fee = self
+            .utxo_set
+            .calculate_transaction_fee(&tx)
+            .ok_or(ValidationError::InvalidTransaction)?;
+
+        // Add to mempool with the calculated fee
+        self.mempool
+            .add_entry(tx, fee)
+            .map_err(ValidationError::MempoolError)?;
+
+        Ok(())
     }
 }
 

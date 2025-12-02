@@ -4,32 +4,27 @@ mod tests {
     use crate::crypto::Hash;
     use crate::crypto::KeyPair;
     use crate::crypto::Signature;
-    use crate::types::{TxInput, TxOutput, Utxo, UtxoRef};
+    use crate::types::{TxInput, TxOutput};
 
     /// Comprehensive test for add_entry validation rules
     /// Tests: coinbase rejection, size limit, fee validation, and valid transaction acceptance
     #[test]
     fn test_add_entry_validation() {
         let mut mempool = Mempool::with_capacity(2);
-        let utxo_set = UTXOSet::new();
 
-        // Setup test accounts and UTXOs
+        // Setup test accounts
         let alice_keypair = KeyPair::generate();
         let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
         let bob_address = [2u8; 20];
 
-        let mut utxo_set_mut = utxo_set.clone();
-
         // Test 1: Reject coinbase transactions
         let coinbase = Transaction::new_coinbase(alice_address, 50);
-        let result = mempool.add_entry(coinbase, &utxo_set_mut);
+        let result = mempool.add_entry(coinbase, 0);
         assert!(matches!(result, Err(MempoolError::CoinbaseNotAllowed)));
         assert_eq!(mempool.current_size(), 0);
 
         // Test 2: Accept valid transaction with proper fee
         let prev_tx_hash1 = Hash::hash(b"utxo1");
-        let utxo_ref1 = UtxoRef::from_bytes(prev_tx_hash1.as_bytes(), 0);
-        utxo_set_mut.add(utxo_ref1, Utxo::new(100, alice_address));
 
         let mut tx1 = Transaction::new(
             vec![TxInput {
@@ -45,14 +40,13 @@ mod tests {
         );
         tx1.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        let result1 = mempool.add_entry(tx1.clone(), &utxo_set_mut);
+        let fee1 = 10; // 100 - 90 = 10
+        let result1 = mempool.add_entry(tx1.clone(), fee1);
         assert!(result1.is_ok());
         assert_eq!(mempool.current_size(), 1);
 
         // Test 3: Accept second valid transaction
         let prev_tx_hash2 = Hash::hash(b"utxo2");
-        let utxo_ref2 = UtxoRef::from_bytes(prev_tx_hash2.as_bytes(), 0);
-        utxo_set_mut.add(utxo_ref2, Utxo::new(100, alice_address));
 
         let mut tx2 = Transaction::new(
             vec![TxInput {
@@ -68,15 +62,14 @@ mod tests {
         );
         tx2.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        let result2 = mempool.add_entry(tx2, &utxo_set_mut);
+        let fee2 = 20; // 100 - 80 = 20
+        let result2 = mempool.add_entry(tx2, fee2);
         assert!(result2.is_ok());
         assert_eq!(mempool.current_size(), 2);
         assert!(mempool.is_full());
 
-        // Test 4: Reject when mempool is full
+        // Test 4: Reject when mempool is full with lower fee
         let prev_tx_hash3 = Hash::hash(b"utxo3");
-        let utxo_ref3 = UtxoRef::from_bytes(prev_tx_hash3.as_bytes(), 0);
-        utxo_set_mut.add(utxo_ref3, Utxo::new(100, alice_address));
 
         let mut tx3 = Transaction::new(
             vec![TxInput {
@@ -92,14 +85,13 @@ mod tests {
         );
         tx3.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        let result3 = mempool.add_entry(tx3, &utxo_set_mut);
+        let fee3 = 5; // 100 - 95 = 5
+        let result3 = mempool.add_entry(tx3, fee3);
         assert!(matches!(result3, Err(MempoolError::FeeTooLow { .. })));
         assert_eq!(mempool.current_size(), 2);
 
         // Test 5: Accept transaction with higher fee, replacing lowest
         let prev_tx_hash4 = Hash::hash(b"utxo4");
-        let utxo_ref4 = UtxoRef::from_bytes(prev_tx_hash4.as_bytes(), 0);
-        utxo_set_mut.add(utxo_ref4, Utxo::new(100, alice_address));
 
         let mut tx4 = Transaction::new(
             vec![TxInput {
@@ -115,7 +107,8 @@ mod tests {
         );
         tx4.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        let result4 = mempool.add_entry(tx4.clone(), &utxo_set_mut);
+        let fee4 = 50; // 100 - 50 = 50
+        let result4 = mempool.add_entry(tx4.clone(), fee4);
         assert!(result4.is_ok());
         assert_eq!(mempool.current_size(), 2); // Still 2, replaced lowest
 
@@ -130,7 +123,6 @@ mod tests {
     #[test]
     fn test_mempool_operations() {
         let mut mempool = Mempool::new();
-        let utxo_set = UTXOSet::new();
 
         // Initial state checks
         assert!(mempool.is_empty());
@@ -139,14 +131,10 @@ mod tests {
 
         // Setup test accounts
         let alice_keypair = KeyPair::generate();
-        let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
         let bob_address = [2u8; 20];
-        let mut utxo_set_mut = utxo_set.clone();
 
         // Add transaction with fee 10
         let prev_tx_hash1 = Hash::hash(b"tx1");
-        let utxo_ref1 = UtxoRef::from_bytes(prev_tx_hash1.as_bytes(), 0);
-        utxo_set_mut.add(utxo_ref1, Utxo::new(100, alice_address));
 
         let mut tx1 = Transaction::new(
             vec![TxInput {
@@ -161,12 +149,10 @@ mod tests {
             }],
         );
         tx1.sign_input(0, &alice_keypair.private_key).unwrap();
-        mempool.add_entry(tx1.clone(), &utxo_set_mut).unwrap();
+        mempool.add_entry(tx1.clone(), 10).unwrap();
 
         // Add transaction with higher fee (20)
         let prev_tx_hash2 = Hash::hash(b"tx2");
-        let utxo_ref2 = UtxoRef::from_bytes(prev_tx_hash2.as_bytes(), 0);
-        utxo_set_mut.add(utxo_ref2, Utxo::new(100, alice_address));
 
         let mut tx2 = Transaction::new(
             vec![TxInput {
@@ -181,7 +167,7 @@ mod tests {
             }],
         );
         tx2.sign_input(0, &alice_keypair.private_key).unwrap();
-        mempool.add_entry(tx2.clone(), &utxo_set_mut).unwrap();
+        mempool.add_entry(tx2.clone(), 20).unwrap();
 
         // Test: Get transactions sorted by fee (highest first)
         let sorted_txs = mempool.get_transactions_by_fee();

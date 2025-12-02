@@ -70,11 +70,11 @@ fn main() {
     );
     tx1.sign_input(0, &alice_keypair.private_key).unwrap();
 
-    match mempool.add_entry(tx1.clone(), &utxo_set) {
+    let fee1 = tx1.calculate_fee(&utxo_set).unwrap();
+    match mempool.add_entry(tx1.clone(), fee1) {
         Ok(_) => {
             println!("  ✓ Transaction added successfully");
-            let fee = tx1.calculate_fee(&utxo_set).unwrap();
-            println!("  Transaction fee: {} coins", fee);
+            println!("  Transaction fee: {} coins", fee1);
         }
         Err(e) => println!("  ✗ Failed to add: {:?}", e),
     }
@@ -83,7 +83,7 @@ fn main() {
     // 6. Try to add a coinbase transaction (should fail)
     println!("Test 2: Attempting to add coinbase transaction");
     let coinbase = Transaction::new_coinbase(bob_address, 50);
-    match mempool.add_entry(coinbase, &utxo_set) {
+    match mempool.add_entry(coinbase, 0) {
         Ok(_) => println!("  ✗ ERROR: Coinbase accepted (should be rejected)"),
         Err(e) => println!("  ✓ Correctly rejected: {:?}", e),
     }
@@ -105,11 +105,11 @@ fn main() {
     );
     tx2.sign_input(0, &alice_keypair.private_key).unwrap();
 
-    match mempool.add_entry(tx2.clone(), &utxo_set) {
+    let fee2 = tx2.calculate_fee(&utxo_set).unwrap();
+    match mempool.add_entry(tx2.clone(), fee2) {
         Ok(_) => {
             println!("  ✓ Transaction added successfully");
-            let fee = tx2.calculate_fee(&utxo_set).unwrap();
-            println!("  Transaction fee: {} coins", fee);
+            println!("  Transaction fee: {} coins", fee2);
         }
         Err(e) => println!("  ✗ Failed to add: {:?}", e),
     }
@@ -157,8 +157,9 @@ fn main() {
         }],
     );
     small_tx1.sign_input(0, &alice_keypair.private_key).unwrap();
-    small_mempool.add_entry(small_tx1, &utxo_set).ok();
-    println!("  Added transaction with fee 10");
+    let small_fee1 = small_tx1.calculate_fee(&utxo_set).unwrap();
+    small_mempool.add_entry(small_tx1, small_fee1).ok();
+    println!("  Added transaction with fee {}", small_fee1);
     println!("  Mempool is now full: {}", small_mempool.is_full());
 
     // Try to add transaction with lower fee (should be rejected)
@@ -179,7 +180,8 @@ fn main() {
         }],
     );
     small_tx2.sign_input(0, &alice_keypair.private_key).unwrap();
-    match small_mempool.add_entry(small_tx2, &utxo_set) {
+    let small_fee2 = small_tx2.calculate_fee(&utxo_set).unwrap();
+    match small_mempool.add_entry(small_tx2, small_fee2) {
         Ok(_) => println!("  ✗ ERROR: Low-fee transaction accepted"),
         Err(e) => println!("  ✓ Low-fee transaction rejected: {:?}", e),
     }
@@ -202,7 +204,8 @@ fn main() {
         }],
     );
     small_tx3.sign_input(0, &alice_keypair.private_key).unwrap();
-    match small_mempool.add_entry(small_tx3, &utxo_set) {
+    let small_fee3 = small_tx3.calculate_fee(&utxo_set).unwrap();
+    match small_mempool.add_entry(small_tx3, small_fee3) {
         Ok(_) => println!("  ✓ High-fee transaction accepted, replaced lowest-fee transaction"),
         Err(e) => println!("  ✗ ERROR: High-fee transaction rejected: {:?}", e),
     }
@@ -245,7 +248,8 @@ fn main() {
     );
     bob_tx.sign_input(0, &bob_keypair.private_key).unwrap();
 
-    temp_mempool.add_entry(bob_tx, &utxo_set).ok();
+    let bob_fee = bob_tx.calculate_fee(&utxo_set).unwrap();
+    temp_mempool.add_entry(bob_tx, bob_fee).ok();
     println!("  Added 1 transaction");
     println!("  Current size: {}", temp_mempool.current_size());
 
