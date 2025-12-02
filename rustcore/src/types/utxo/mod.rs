@@ -237,3 +237,4 @@ impl UTXOSet {
         self.utxos.iter().filter(|(_, utxo)| !utxo.is_spent())
     }
 }
+
