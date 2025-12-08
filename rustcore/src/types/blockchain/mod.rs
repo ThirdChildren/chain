@@ -15,6 +15,7 @@ pub enum ValidationError {
     DoubleSpend,
     InvalidAmount,
     EmptyTransaction,
+    ExcessiveCoinbaseReward,
     BlockStructureError(BlockValidationError),
     MempoolError(crate::types::MempoolError),
 }
@@ -142,17 +143,41 @@ impl Blockchain {
         block_index: u32,
     ) -> Result<(), ValidationError> {
         let mut spent_in_block = HashSet::new();
+        let mut total_fees = 0u64;
 
         for tx in block.transactions.iter() {
             Self::validate_transaction_in_block(tx, utxo_set, block_index, &spent_in_block)?;
 
             if !tx.is_coinbase() {
+                // Calculate fee for this transaction
+                if let Some(fee) = utxo_set.calculate_transaction_fee(tx) {
+                    total_fees = total_fees
+                        .checked_add(fee)
+                        .ok_or(ValidationError::InvalidAmount)?;
+                }
+
                 for input in &tx.inputs {
                     let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
                     spent_in_block.insert(utxo_ref);
                 }
             }
         }
+
+        // Validate coinbase reward
+        if let Some(coinbase) = block.transactions.first() {
+            if coinbase.is_coinbase() {
+                let coinbase_amount: u64 = coinbase.outputs.iter().map(|o| o.amount).sum();
+
+                let max_allowed = BLOCK_REWARD
+                    .checked_add(total_fees)
+                    .ok_or(ValidationError::InvalidAmount)?;
+
+                if coinbase_amount > max_allowed {
+                    return Err(ValidationError::ExcessiveCoinbaseReward);
+                }
+            }
+        }
+
         Ok(())
     }
 
