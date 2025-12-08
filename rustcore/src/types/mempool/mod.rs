@@ -71,7 +71,7 @@ impl Mempool {
             .as_millis()
     }
 
-    /// Add a transaction to the mempool with a pre-calculated fee
+    /// Add a transaction to the mempool
     pub fn add_entry(&mut self, transaction: Transaction, fee: u64) -> Result<(), MempoolError> {
         // Check 1: Reject coinbase transactions
         if transaction.is_coinbase() {

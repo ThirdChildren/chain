@@ -3,6 +3,8 @@ construct_uint! {
     pub struct U256(4);
 }
 
+const BLOCK_REWARD: u64 = 50;
+
 pub mod crypto;
-pub mod util;
 pub mod types;
+pub mod util;

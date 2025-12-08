@@ -1,9 +1,8 @@
+use crate::BLOCK_REWARD;
 use crate::crypto::{Hash, PrivateKey, PublicKey};
 use crate::types::block::BlockValidationError;
 use crate::types::{Block, Mempool, Transaction, UTXOSet, UtxoRef};
 use std::collections::{HashMap, HashSet};
-
-const BLOCK_REWARD: u64 = 50;
 
 #[derive(Debug)]
 pub enum ValidationError {

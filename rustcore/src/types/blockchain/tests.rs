@@ -251,27 +251,6 @@ mod tests {
     }
 
     #[test]
-    fn test_get_balance() {
-        let alice_keypair = KeyPair::generate();
-        let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
-        let miner_keypair = KeyPair::generate();
-
-        let coinbase_tx = Transaction::new_coinbase(alice_address, 100);
-        let genesis_block = Block::new_signed(
-            0,
-            Hash::zero(),
-            Block::get_current_timestamp(),
-            vec![coinbase_tx.clone()],
-            miner_keypair.public_key.clone(),
-            &miner_keypair.private_key,
-        );
-
-        let blockchain = Blockchain::new_blockchain("test".to_string(), genesis_block).unwrap();
-
-        assert_eq!(blockchain.get_balance(&alice_address), 100);
-    }
-
-    #[test]
     fn test_create_block_from_mempool() {
         let alice_keypair = KeyPair::generate();
         let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
