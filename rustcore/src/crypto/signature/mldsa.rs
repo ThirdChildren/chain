@@ -23,6 +23,24 @@ pub struct MLDSAPrivateKey {
 #[derive(Clone, Debug)]
 pub struct MLDSASignature(pub Vec<u8>);
 
+impl Default for MLDSASignature {
+    fn default() -> Self {
+        // Create a dummy signature with the correct length for Dilithium5
+        // This is only used for initialization and will be overwritten by sign_input()
+        // Filled with zeros - will fail verification (which is correct for unsigned inputs)
+        MLDSASignature(vec![0u8; dilithium5::signature_bytes()])
+    }
+}
+
+impl Default for MLDSAPublicKey {
+    fn default() -> Self {
+        // Create a dummy public key with the correct length for Dilithium5
+        // This is only used for initialization and will be overwritten by sign_input()
+        // Filled with zeros - will fail verification (which is correct for unsigned inputs)
+        MLDSAPublicKey(vec![0u8; dilithium5::public_key_bytes()])
+    }
+}
+
 impl CryptoKey for MLDSAPublicKey {
     fn to_bytes(&self) -> Vec<u8> {
         self.0.clone()
@@ -219,7 +237,7 @@ mod tests {
             &wrong_data,
             &keypair.public_key
         ));
-}
+    }
 
     #[test]
     fn test_mldsa_key_serialization() {

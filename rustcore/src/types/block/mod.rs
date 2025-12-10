@@ -36,6 +36,16 @@ impl Block {
             .as_millis()
     }
 
+    /// Create a block with a pre-made signature
+    ///
+    /// **WARNING**: This method does NOT validate the signature!
+    /// Use `new_signed()` for production code to ensure proper signing.
+    ///
+    /// This method is useful for:
+    /// - Testing scenarios (creating blocks with invalid signatures)
+    /// - Deserializing blocks from storage/network
+    /// - Unit tests that need precise control over block fields
+    #[doc(hidden)]
     pub fn new(
         index: u32,
         prev_block_hash: Hash,
@@ -57,7 +67,7 @@ impl Block {
         block
     }
 
-    /// Create a new block with proper signature over the block hash
+    /// Create a new block with proper cryptographic signature
     pub fn new_signed(
         index: u32,
         prev_block_hash: Hash,
@@ -66,7 +76,7 @@ impl Block {
         author: PublicKey,
         author_private_key: &crate::crypto::PrivateKey,
     ) -> Self {
-        // Create block with temporary signature
+        // Step 1: Create block with temporary default signature
         let mut block = Block {
             hash: Hash::zero(),
             index,
@@ -74,11 +84,13 @@ impl Block {
             timestamp,
             transactions,
             author: author.clone(),
-            signature: Signature::sign_output(&Hash::zero(), author_private_key),
+            signature: Signature::default(),
         };
+
+        // Step 2: Calculate the block hash
         block.hash = block.calculate_hash();
 
-        // Sign with the actual block hash
+        // Step 3: Sign the actual block hash with the author's private key
         block.signature = Signature::sign_output(&block.hash, author_private_key);
 
         block

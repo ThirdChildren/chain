@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["secp256k1", "sha256"]
+default = ["mldsa", "sha256"]
 # Signature backends
 secp256k1 = ["dep:k256", "dep:ecdsa"]
 mldsa = ["dep:pqcrypto-dilithium", "dep:pqcrypto-traits"]
