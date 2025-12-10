@@ -163,17 +163,19 @@ impl Blockchain {
             }
         }
 
-        // Validate coinbase reward
-        if let Some(coinbase) = block.transactions.first() {
-            if coinbase.is_coinbase() {
-                let coinbase_amount: u64 = coinbase.outputs.iter().map(|o| o.amount).sum();
+        // Validate coinbase reward (skip for genesis block)
+        if block_index > 0 {
+            if let Some(coinbase) = block.transactions.first() {
+                if coinbase.is_coinbase() {
+                    let coinbase_amount: u64 = coinbase.outputs.iter().map(|o| o.amount).sum();
 
-                let max_allowed = BLOCK_REWARD
-                    .checked_add(total_fees)
-                    .ok_or(ValidationError::InvalidAmount)?;
+                    let max_allowed = BLOCK_REWARD
+                        .checked_add(total_fees)
+                        .ok_or(ValidationError::InvalidAmount)?;
 
-                if coinbase_amount > max_allowed {
-                    return Err(ValidationError::ExcessiveCoinbaseReward);
+                    if coinbase_amount > max_allowed {
+                        return Err(ValidationError::ExcessiveCoinbaseReward);
+                    }
                 }
             }
         }

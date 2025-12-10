@@ -16,6 +16,18 @@ pub struct TxInput {
     pub public_key: PublicKey,
 }
 
+impl TxInput {
+    /// Create an unsigned input (to be signed later with Transaction::sign_input)
+    pub fn unsigned(previous_tx_id: [u8; 32], output_index: u32) -> Self {
+        TxInput {
+            previous_tx_id,
+            output_index,
+            signature: Signature::default(),
+            public_key: PublicKey::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TxOutput {
     pub amount: u64,
@@ -117,11 +129,14 @@ impl Transaction {
             return Err("Input index out of bounds");
         }
 
+        // Set the public key BEFORE calculating the signature hash
+        // This ensures the hash includes the correct public key
+        self.inputs[input_index].public_key = private_key.public_key();
+
         let sig_hash = self.signature_hash(input_index);
         let signature = Signature::sign_output(&sig_hash, private_key);
 
         self.inputs[input_index].signature = signature;
-        self.inputs[input_index].public_key = private_key.public_key();
 
         Ok(())
     }

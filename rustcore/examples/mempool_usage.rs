@@ -8,7 +8,7 @@
 //! - Retrieving transactions sorted by fee (for mining)
 //! - Removing transactions after they're included in blocks
 
-use rustcore::crypto::{Hash, KeyPair, Signature};
+use rustcore::crypto::{Hash, KeyPair};
 use rustcore::types::{Mempool, Transaction, TxInput, TxOutput, UTXOSet, Utxo, UtxoRef};
 
 fn main() {
@@ -57,12 +57,7 @@ fn main() {
     // 5. Create and add a valid transaction with fee 10
     println!("Test 1: Adding valid transaction (Alice → Bob, 90 coins, fee 10)");
     let mut tx1 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: prev_tx1.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(prev_tx1.as_bytes(), 0)],
         vec![TxOutput {
             amount: 90,
             recipient: bob_address,
@@ -92,12 +87,7 @@ fn main() {
     // 7. Create transaction with higher fee
     println!("Test 3: Adding transaction with higher fee (Alice → Charlie, 30 coins, fee 20)");
     let mut tx2 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: prev_tx2.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(prev_tx2.as_bytes(), 0)],
         vec![TxOutput {
             amount: 30,
             recipient: charlie_address,
@@ -145,12 +135,7 @@ fn main() {
     utxo_set.add(alice_small_ref1, Utxo::new(100, alice_address));
 
     let mut small_tx1 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: alice_small_tx1.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(alice_small_tx1.as_bytes(), 0)],
         vec![TxOutput {
             amount: 90, // fee = 10
             recipient: bob_address,
@@ -168,12 +153,7 @@ fn main() {
     utxo_set.add(alice_small_ref2, Utxo::new(100, alice_address));
 
     let mut small_tx2 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: alice_small_tx2.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(alice_small_tx2.as_bytes(), 0)],
         vec![TxOutput {
             amount: 95, // fee = 5 (lower than 10)
             recipient: bob_address,
@@ -192,12 +172,7 @@ fn main() {
     utxo_set.add(alice_small_ref3, Utxo::new(100, alice_address));
 
     let mut small_tx3 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: alice_small_tx3.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(alice_small_tx3.as_bytes(), 0)],
         vec![TxOutput {
             amount: 80, // fee = 20 (higher than 10)
             recipient: bob_address,
@@ -235,12 +210,7 @@ fn main() {
     utxo_set.add(bob_utxo_ref, Utxo::new(100, bob_address));
 
     let mut bob_tx = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: bob_prev_tx.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &bob_keypair.private_key),
-            public_key: bob_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(bob_prev_tx.as_bytes(), 0)],
         vec![TxOutput {
             amount: 90,
             recipient: alice_address,

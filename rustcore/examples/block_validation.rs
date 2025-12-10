@@ -7,7 +7,7 @@
 //! - Detecting invalid blocks (wrong hash, duplicates, double-spend, etc.)
 //! - Automatic UTXO set management by the blockchain
 
-use rustcore::crypto::{Hash, KeyPair, Signature};
+use rustcore::crypto::{Hash, KeyPair};
 use rustcore::types::{Block, Blockchain, Transaction, TxInput, TxOutput};
 
 fn main() {
@@ -78,12 +78,8 @@ fn main() {
     // Create Transaction 1: Alice sends 50 to Bob, keeps 45 as change
     let genesis_coinbase_hash = genesis_coinbase.hash();
     let mut tx1 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: genesis_coinbase_hash.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        // Create unsigned input - will be signed with sign_input() below
+        vec![TxInput::unsigned(genesis_coinbase_hash.as_bytes(), 0)],
         vec![
             TxOutput {
                 amount: 50,
@@ -210,12 +206,7 @@ fn main() {
     println!("Test 2: Block with duplicate transactions");
     let tx_hash = tx1.hash();
     let mut bob_tx = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: tx_hash.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &bob_keypair.private_key),
-            public_key: bob_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(tx_hash.as_bytes(), 0)],
         vec![TxOutput {
             amount: 25,
             recipient: alice_address,
@@ -243,12 +234,7 @@ fn main() {
     // Test 3: Block with double-spend (same UTXO used twice)
     println!("Test 3: Block with double-spend");
     let mut double_spend_tx = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: tx_hash.as_bytes(),
-            output_index: 0,
-            signature: Signature::sign_output(&Hash::zero(), &bob_keypair.private_key),
-            public_key: bob_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(tx_hash.as_bytes(), 0)],
         vec![TxOutput {
             amount: 30,
             recipient: alice_address,
@@ -278,25 +264,20 @@ fn main() {
     // Test 4: Block without coinbase
     println!("Test 4: Block without coinbase transaction");
     let charlie_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
-    let mut alice_tx2 = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: tx1.hash().as_bytes(),
-            output_index: 1,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+    let mut tx3 = Transaction::new(
+        vec![TxInput::unsigned(tx1.hash().as_bytes(), 1)],
         vec![TxOutput {
             amount: 20,
             recipient: charlie_address,
         }],
     );
-    alice_tx2.sign_input(0, &alice_keypair.private_key).unwrap();
+    tx3.sign_input(0, &alice_keypair.private_key).unwrap();
 
     let no_coinbase_block = Block::new_signed(
         2,
         block_1_hash,
         Block::get_current_timestamp(),
-        vec![alice_tx2], // No coinbase!
+        vec![tx3], // No coinbase!
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
     );
@@ -311,19 +292,14 @@ fn main() {
     // Test 5: Block with invalid signature
     println!("Test 5: Block with invalid signature (wrong keypair)");
     let wrong_keypair = KeyPair::generate();
-    let mut invalid_sig_tx = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: tx1.hash().as_bytes(),
-            output_index: 1,
-            signature: Signature::sign_output(&Hash::zero(), &wrong_keypair.private_key),
-            public_key: wrong_keypair.public_key.clone(), // Wrong public key!
-        }],
+    let mut invalid_signature_tx = Transaction::new(
+        vec![TxInput::unsigned(tx1.hash().as_bytes(), 1)],
         vec![TxOutput {
             amount: 20,
             recipient: charlie_address,
         }],
     );
-    invalid_sig_tx
+    invalid_signature_tx
         .sign_input(0, &wrong_keypair.private_key)
         .unwrap();
 
@@ -332,7 +308,7 @@ fn main() {
         2,
         block_1_hash,
         Block::get_current_timestamp(),
-        vec![invalid_sig_coinbase, invalid_sig_tx],
+        vec![invalid_sig_coinbase, invalid_signature_tx],
         miner_keypair.public_key.clone(),
         &miner_keypair.private_key,
     );
@@ -347,12 +323,7 @@ fn main() {
     // Test 6: Valid block to finalize
     println!("Test 6: Adding another valid block");
     let mut alice_tx_final = Transaction::new(
-        vec![TxInput {
-            previous_tx_id: tx1.hash().as_bytes(),
-            output_index: 1,
-            signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-            public_key: alice_keypair.public_key.clone(),
-        }],
+        vec![TxInput::unsigned(tx1.hash().as_bytes(), 1)],
         vec![
             TxOutput {
                 amount: 20,

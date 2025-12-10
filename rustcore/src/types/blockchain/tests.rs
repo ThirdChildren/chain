@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::crypto::{Hash, KeyPair, Signature};
+    use crate::crypto::{Hash, KeyPair};
     use crate::types::{Block, Transaction, TxInput, TxOutput};
 
     #[test]
@@ -55,12 +55,7 @@ mod tests {
 
         let genesis_coinbase_hash = coinbase_tx.hash();
         let mut tx1 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: genesis_coinbase_hash.as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(genesis_coinbase_hash.as_bytes(), 0)],
             vec![
                 TxOutput {
                     amount: 30,
@@ -154,12 +149,7 @@ mod tests {
         let genesis_coinbase_hash = coinbase_tx.hash();
 
         let mut tx1 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: genesis_coinbase_hash.as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(genesis_coinbase_hash.as_bytes(), 0)],
             vec![TxOutput {
                 amount: 60,
                 recipient: bob_address,
@@ -168,12 +158,7 @@ mod tests {
         tx1.sign_input(0, &alice_keypair.private_key).unwrap();
 
         let mut tx2 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: genesis_coinbase_hash.as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(genesis_coinbase_hash.as_bytes(), 0)],
             vec![TxOutput {
                 amount: 60,
                 recipient: charlie_address,
@@ -216,12 +201,7 @@ mod tests {
         let blockchain = Blockchain::new_blockchain("test".to_string(), genesis_block).unwrap();
 
         let mut valid_tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: coinbase_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(coinbase_tx.hash().as_bytes(), 0)],
             vec![TxOutput {
                 amount: 50,
                 recipient: bob_address,
@@ -232,12 +212,7 @@ mod tests {
         assert!(blockchain.validate_transaction(&valid_tx).is_ok());
 
         let mut invalid_tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: coinbase_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(coinbase_tx.hash().as_bytes(), 0)],
             vec![TxOutput {
                 amount: 150,
                 recipient: bob_address,
@@ -281,12 +256,7 @@ mod tests {
 
         // TX1: Alice -> Bob, 50 coins, fee = 10 (input 200, output 50+140)
         let mut tx1 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: genesis_hash.as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(genesis_hash.as_bytes(), 0)],
             vec![
                 TxOutput {
                     amount: 50,
@@ -306,12 +276,7 @@ mod tests {
 
         // TX2: Alice -> Charlie, trying to spend same UTXO, fee = 20 (higher fee)
         let mut tx2 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: genesis_hash.as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(genesis_hash.as_bytes(), 0)],
             vec![
                 TxOutput {
                     amount: 60,
@@ -431,12 +396,7 @@ mod tests {
         // We can only create one transaction from genesis UTXO
         // But we can test the max_transactions parameter with limit of 0
         let mut tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: genesis_coinbase.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(genesis_coinbase.hash().as_bytes(), 0)],
             vec![TxOutput {
                 amount: 995,
                 recipient: alice_address,

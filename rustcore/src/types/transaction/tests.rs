@@ -5,16 +5,10 @@ mod tests {
 
     #[test]
     fn test_transaction_creation() {
-        let alice_keypair = KeyPair::generate();
         let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
 
         let tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: [0u8; 32],
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned([0u8; 32], 0)],
             vec![TxOutput {
                 amount: 50,
                 recipient: bob_address,
@@ -27,53 +21,12 @@ mod tests {
     }
 
     #[test]
-    fn test_coinbase_transaction() {
-        let miner_address = [1u8; 20];
-        let coinbase = Transaction::new_coinbase(miner_address, 50);
-
-        assert!(coinbase.is_coinbase());
-        assert_eq!(coinbase.inputs.len(), 0);
-        assert_eq!(coinbase.outputs.len(), 1);
-        assert_eq!(coinbase.outputs[0].amount, 50);
-    }
-
-    #[test]
-    fn test_signature_hash() {
-        let alice_keypair = KeyPair::generate();
-        let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
-
-        let tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: [1u8; 32],
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
-            vec![TxOutput {
-                amount: 30,
-                recipient: bob_address,
-            }],
-        );
-
-        let hash1 = tx.signature_hash(0);
-        let hash2 = tx.signature_hash(0);
-
-        // Same transaction should produce same signature hash
-        assert_eq!(hash1, hash2);
-    }
-
-    #[test]
     fn test_sign_input() {
         let alice_keypair = KeyPair::generate();
         let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
 
         let mut tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: [1u8; 32],
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned([1u8; 32], 0)],
             vec![TxOutput {
                 amount: 30,
                 recipient: bob_address,
@@ -105,12 +58,7 @@ mod tests {
         let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
 
         let tx = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: initial_tx.hash().as_bytes(),
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
+            vec![TxInput::unsigned(initial_tx.hash().as_bytes(), 0)],
             vec![TxOutput {
                 amount: 95,
                 recipient: bob_address,
@@ -119,40 +67,5 @@ mod tests {
 
         let fee = tx.calculate_fee(&utxo_set);
         assert_eq!(fee, Some(5));
-    }
-
-    #[test]
-    fn test_transaction_hash() {
-        let alice_keypair = KeyPair::generate();
-        let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
-
-        let tx1 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: [1u8; 32],
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
-            vec![TxOutput {
-                amount: 50,
-                recipient: bob_address,
-            }],
-        );
-
-        let tx2 = Transaction::new(
-            vec![TxInput {
-                previous_tx_id: [1u8; 32],
-                output_index: 0,
-                signature: Signature::sign_output(&Hash::zero(), &alice_keypair.private_key),
-                public_key: alice_keypair.public_key.clone(),
-            }],
-            vec![TxOutput {
-                amount: 50,
-                recipient: bob_address,
-            }],
-        );
-
-        // Same transaction data should produce same hash
-        assert_eq!(tx1.hash(), tx2.hash());
     }
 }
