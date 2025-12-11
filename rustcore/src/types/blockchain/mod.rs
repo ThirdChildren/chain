@@ -1,24 +1,11 @@
+// Blockchain module - Main state management
+mod validator;
+pub use validator::ValidationError;
+
 use crate::BLOCK_REWARD;
 use crate::crypto::{Hash, PrivateKey, PublicKey};
-use crate::types::block::BlockValidationError;
 use crate::types::{Block, Mempool, Transaction, UTXOSet, UtxoRef};
 use std::collections::{HashMap, HashSet};
-
-#[derive(Debug)]
-pub enum ValidationError {
-    InvalidBlock,
-    InvalidGenesisBlock,
-    InvalidTransaction,
-    InputNotFound,
-    InvalidSignature,
-    InsufficientFunds,
-    DoubleSpend,
-    InvalidAmount,
-    EmptyTransaction,
-    ExcessiveCoinbaseReward,
-    BlockStructureError(BlockValidationError),
-    MempoolError(crate::types::MempoolError),
-}
 
 #[derive(Debug, Clone)]
 pub struct Blockchain {
@@ -30,6 +17,7 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
+    /// Creates a new blockchain with a genesis block
     pub fn new_blockchain(id: String, genesis_block: Block) -> Result<Self, ValidationError> {
         let mut blockchain = Blockchain {
             id,
@@ -44,15 +32,15 @@ impl Blockchain {
         Ok(blockchain)
     }
 
+    /// Validates and adds the genesis block
     fn validate_and_add_genesis(&mut self, block: Block) -> Result<(), ValidationError> {
-        block
-            .validate_genesis_structure()
-            .map_err(ValidationError::BlockStructureError)?;
+        // Validate genesis block
+        validator::validate_genesis_block(&block, &self.utxo_set)?;
 
-        Self::validate_block_transactions(&block, &self.utxo_set, 0)?;
-
+        // Apply the genesis block
         self.apply_block(&block);
 
+        // Add to chain
         let block_hash = block.hash();
         self.block_by_hash.insert(block_hash, 0);
         self.blocks.push(block);
@@ -60,66 +48,12 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Validates a transaction against current blockchain state
     pub fn validate_transaction(&self, tx: &Transaction) -> Result<(), ValidationError> {
-        if tx.outputs.is_empty() {
-            return Err(ValidationError::EmptyTransaction);
-        }
-
-        if tx.is_coinbase() {
-            for output in &tx.outputs {
-                if output.amount == 0 {
-                    return Err(ValidationError::InvalidAmount);
-                }
-            }
-            return Ok(());
-        }
-
-        if tx.inputs.is_empty() {
-            return Err(ValidationError::EmptyTransaction);
-        }
-
-        let mut total_input_amount = 0u64;
-        let mut total_output_amount = 0u64;
-
-        for (i, input) in tx.inputs.iter().enumerate() {
-            let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-
-            let referenced_output = self
-                .utxo_set
-                .get_unspent(&utxo_ref)
-                .ok_or(ValidationError::InputNotFound)?;
-
-            let public_key_hash = Transaction::public_key_to_address(&input.public_key);
-            if public_key_hash != referenced_output.recipient {
-                return Err(ValidationError::InvalidSignature);
-            }
-
-            let sig_hash = tx.signature_hash(i);
-            if !input.signature.verify(&sig_hash, &input.public_key) {
-                return Err(ValidationError::InvalidSignature);
-            }
-
-            total_input_amount = total_input_amount
-                .checked_add(referenced_output.amount)
-                .ok_or(ValidationError::InvalidAmount)?;
-        }
-
-        for output in &tx.outputs {
-            if output.amount == 0 {
-                return Err(ValidationError::InvalidAmount);
-            }
-            total_output_amount = total_output_amount
-                .checked_add(output.amount)
-                .ok_or(ValidationError::InvalidAmount)?;
-        }
-
-        if total_input_amount < total_output_amount {
-            return Err(ValidationError::InsufficientFunds);
-        }
-
-        Ok(())
+        validator::validate_transaction(tx, &self.utxo_set)
     }
 
+    /// Validates a block against current blockchain state
     pub fn validate_block(&self, block: &Block) -> Result<(), ValidationError> {
         let expected_prev_hash = if self.blocks.is_empty() {
             Hash::zero()
@@ -127,143 +61,19 @@ impl Blockchain {
             self.blocks.last().unwrap().hash()
         };
 
-        block
-            .validate_structure(&expected_prev_hash)
-            .map_err(ValidationError::BlockStructureError)?;
-
         let block_index = self.blocks.len() as u32;
-        Self::validate_block_transactions(block, &self.utxo_set, block_index)?;
 
-        Ok(())
+        validator::validate_block(block, &self.utxo_set, &expected_prev_hash, block_index)
     }
 
-    fn validate_block_transactions(
-        block: &Block,
-        utxo_set: &UTXOSet,
-        block_index: u32,
-    ) -> Result<(), ValidationError> {
-        let mut spent_in_block = HashSet::new();
-        let mut total_fees = 0u64;
-
-        for tx in block.transactions.iter() {
-            Self::validate_transaction_in_block(tx, utxo_set, block_index, &spent_in_block)?;
-
-            if !tx.is_coinbase() {
-                // Calculate fee for this transaction
-                if let Some(fee) = utxo_set.calculate_transaction_fee(tx) {
-                    total_fees = total_fees
-                        .checked_add(fee)
-                        .ok_or(ValidationError::InvalidAmount)?;
-                }
-
-                for input in &tx.inputs {
-                    let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-                    spent_in_block.insert(utxo_ref);
-                }
-            }
-        }
-
-        // Validate coinbase reward (skip for genesis block)
-        if block_index > 0 {
-            if let Some(coinbase) = block.transactions.first() {
-                if coinbase.is_coinbase() {
-                    let coinbase_amount: u64 = coinbase.outputs.iter().map(|o| o.amount).sum();
-
-                    let max_allowed = BLOCK_REWARD
-                        .checked_add(total_fees)
-                        .ok_or(ValidationError::InvalidAmount)?;
-
-                    if coinbase_amount > max_allowed {
-                        return Err(ValidationError::ExcessiveCoinbaseReward);
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_transaction_in_block(
-        tx: &Transaction,
-        utxo_set: &UTXOSet,
-        block_index: u32,
-        spent_in_block: &HashSet<UtxoRef>,
-    ) -> Result<(), ValidationError> {
-        if tx.outputs.is_empty() {
-            return Err(ValidationError::EmptyTransaction);
-        }
-
-        if tx.is_coinbase() {
-            for output in &tx.outputs {
-                if output.amount == 0 {
-                    return Err(ValidationError::InvalidAmount);
-                }
-            }
-            return Ok(());
-        }
-
-        if tx.inputs.is_empty() {
-            return Err(ValidationError::EmptyTransaction);
-        }
-
-        let mut total_input_amount = 0u64;
-        let mut total_output_amount = 0u64;
-
-        for (i, input) in tx.inputs.iter().enumerate() {
-            let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
-
-            if spent_in_block.contains(&utxo_ref) {
-                return Err(ValidationError::DoubleSpend);
-            }
-
-            let referenced_output = utxo_set
-                .get(&utxo_ref)
-                .ok_or(ValidationError::InputNotFound)?;
-
-            if let Some(spent_block) = referenced_output.spent_in_block {
-                if spent_block == block_index {
-                    return Err(ValidationError::DoubleSpend);
-                }
-                return Err(ValidationError::InputNotFound);
-            }
-
-            let public_key_hash = Transaction::public_key_to_address(&input.public_key);
-            if public_key_hash != referenced_output.recipient {
-                return Err(ValidationError::InvalidSignature);
-            }
-
-            let sig_hash = tx.signature_hash(i);
-            if !input.signature.verify(&sig_hash, &input.public_key) {
-                return Err(ValidationError::InvalidSignature);
-            }
-
-            total_input_amount = total_input_amount
-                .checked_add(referenced_output.amount)
-                .ok_or(ValidationError::InvalidAmount)?;
-        }
-
-        for output in &tx.outputs {
-            if output.amount == 0 {
-                return Err(ValidationError::InvalidAmount);
-            }
-            total_output_amount = total_output_amount
-                .checked_add(output.amount)
-                .ok_or(ValidationError::InvalidAmount)?;
-        }
-
-        if total_input_amount < total_output_amount {
-            return Err(ValidationError::InsufficientFunds);
-        }
-
-        Ok(())
-    }
-
+    /// Applies a block to the blockchain state
     fn apply_block(&mut self, block: &Block) {
         let block_index = self.blocks.len() as u32;
 
         for tx in &block.transactions {
             let tx_hash = tx.hash();
 
+            // Mark inputs as spent (for non-coinbase transactions)
             if !tx.is_coinbase() {
                 for input in &tx.inputs {
                     let utxo_ref = UtxoRef::from_bytes(input.previous_tx_id, input.output_index);
@@ -273,6 +83,7 @@ impl Blockchain {
                 }
             }
 
+            // Add new outputs to UTXO set (for all transactions)
             for (index, output) in tx.outputs.iter().enumerate() {
                 let utxo_ref = UtxoRef::new(tx_hash, index as u32);
                 let utxo = crate::types::utxo::Utxo::new(output.amount, output.recipient);
@@ -281,7 +92,7 @@ impl Blockchain {
         }
     }
 
-    /// Create a new block from transactions in the mempool
+    /// Creates a new block from transactions in the mempool
     pub fn create_block(
         &self,
         miner_public_key: PublicKey,
@@ -358,24 +169,30 @@ impl Blockchain {
         )
     }
 
+    /// Adds a validated block to the blockchain
     pub fn add_block(&mut self, new_block: Block) -> Result<(), ValidationError> {
         let block_hash = new_block.hash();
+
+        // Check if block already exists (idempotent)
         if self.block_by_hash.contains_key(&block_hash) {
             return Ok(());
         }
 
+        // Validate the block
         self.validate_block(&new_block)?;
 
+        // Apply the block (update UTXO set)
         self.apply_block(&new_block);
 
-        // Remove transactions that are now in the block
+        // Remove transactions that are now in the block from mempool
         for tx in &new_block.transactions {
             if !tx.is_coinbase() {
                 self.mempool.remove_entry(tx);
             }
         }
 
-        // Collect transactions that are no longer valid with the new UTXO set
+        // Clean up mempool: remove transactions that became invalid
+        // (e.g., their inputs were spent by transactions in the new block)
         let invalid_txs: Vec<_> = self
             .mempool
             .entries
@@ -384,55 +201,68 @@ impl Blockchain {
             .map(|entry| entry.transaction.clone())
             .collect();
 
-        // Remove invalid transactions
         for tx in invalid_txs {
             self.mempool.remove_entry(&tx);
         }
 
+        // Add block to the chain
         self.block_by_hash.insert(block_hash, self.blocks.len());
         self.blocks.push(new_block);
 
         Ok(())
     }
 
+    /// Submits a transaction to the mempool
+    pub fn submit_transaction(&mut self, tx: Transaction) -> Result<(), ValidationError> {
+        // Validate the transaction
+        self.validate_transaction(&tx)?;
+
+        // Calculate the fee
+        let fee = self
+            .utxo_set
+            .calculate_transaction_fee(&tx)
+            .ok_or(ValidationError::InvalidTransaction)?;
+
+        // Add to mempool
+        self.mempool.add_entry(tx, fee).map_err(|e| match e {
+            crate::types::MempoolError::FeeTooLow { .. } => ValidationError::InvalidTransaction,
+            crate::types::MempoolError::CoinbaseNotAllowed => ValidationError::InvalidTransaction,
+            crate::types::MempoolError::InvalidTransaction(_) => {
+                ValidationError::InvalidTransaction
+            }
+            crate::types::MempoolError::InvalidFee => ValidationError::InvalidTransaction,
+        })?;
+
+        Ok(())
+    }
+
+    // ========== Query Methods ==========
+
+    /// Gets a block by its hash
     pub fn get_block_by_hash(&self, hash: Hash) -> Option<&Block> {
         self.block_by_hash
             .get(&hash)
             .map(|&index| &self.blocks[index])
     }
 
+    /// Gets a block by its index (height)
     pub fn get_block_by_index(&self, index: usize) -> Option<&Block> {
         self.blocks.get(index)
     }
 
+    /// Returns the height of the blockchain (number of blocks)
     pub fn height(&self) -> usize {
         self.blocks.len()
     }
 
+    /// Checks if the blockchain is empty (no blocks)
     pub fn is_empty(&self) -> bool {
         self.blocks.is_empty()
     }
 
+    /// Gets the balance of an address
     pub fn get_balance(&self, address: &[u8; 20]) -> u64 {
         self.utxo_set.get_balance(address)
-    }
-
-    /// Submit a transaction to the mempool
-    pub fn submit_transaction(&mut self, tx: Transaction) -> Result<(), ValidationError> {
-        self.validate_transaction(&tx)?;
-
-        // Calculate the fee using the UTXO set
-        let fee = self
-            .utxo_set
-            .calculate_transaction_fee(&tx)
-            .ok_or(ValidationError::InvalidTransaction)?;
-
-        // Add to mempool with the calculated fee
-        self.mempool
-            .add_entry(tx, fee)
-            .map_err(ValidationError::MempoolError)?;
-
-        Ok(())
     }
 }
 
