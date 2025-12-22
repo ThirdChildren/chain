@@ -37,14 +37,6 @@ impl Block {
     }
 
     /// Create a block with a pre-made signature
-    ///
-    /// **WARNING**: This method does NOT validate the signature!
-    /// Use `new_signed()` for production code to ensure proper signing.
-    ///
-    /// This method is useful for:
-    /// - Testing scenarios (creating blocks with invalid signatures)
-    /// - Deserializing blocks from storage/network
-    /// - Unit tests that need precise control over block fields
     #[doc(hidden)]
     pub fn new(
         index: u32,
@@ -130,11 +122,7 @@ impl Block {
         self.signature.verify(&self.hash, &self.author)
     }
 
-    /// Validate the structure of transactions in the block (without UTXO validation)
-    /// - Block must not be empty
-    /// - First transaction must be coinbase
-    /// - All other transactions must NOT be coinbase
-    /// - No duplicate transactions
+    /// Validate the structure of transactions in the block
     pub fn validate_transaction_structure(&self) -> Result<(), BlockValidationError> {
         // Block must have at least one transaction
         if self.transactions.is_empty() {
@@ -166,10 +154,6 @@ impl Block {
     }
 
     /// Validate a regular block structure
-    /// - Hash must be correct
-    /// - Previous hash must match expected
-    /// - Author signature must be valid
-    /// - Transaction structure must be valid
     pub fn validate_structure(
         &self,
         expected_prev_hash: &Hash,
@@ -192,11 +176,6 @@ impl Block {
     }
 
     /// Validate genesis block structure
-    /// - Index must be 0
-    /// - Previous hash must be zero
-    /// - Hash must be correct
-    /// - Author signature must be valid
-    /// - Transaction structure must be valid
     pub fn validate_genesis_structure(&self) -> Result<(), BlockValidationError> {
         if self.index != 0 {
             return Err(BlockValidationError::InvalidGenesisIndex);

@@ -71,6 +71,11 @@ impl Mempool {
             .as_millis()
     }
 
+    /// Get the number of transactions in the mempool
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
     /// Add a transaction to the mempool
     pub fn add_entry(&mut self, transaction: Transaction, fee: u64) -> Result<(), MempoolError> {
         // Check 1: Reject coinbase transactions
@@ -130,11 +135,6 @@ impl Mempool {
     pub fn remove_entry(&mut self, transaction: &Transaction) {
         self.entries
             .retain(|entry| entry.transaction.hash() != transaction.hash());
-    }
-
-    /// Get current size of the mempool
-    pub fn current_size(&self) -> usize {
-        self.entries.len()
     }
 
     /// Check if mempool is full

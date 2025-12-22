@@ -21,7 +21,7 @@ mod tests {
         let coinbase = Transaction::new_coinbase(alice_address, 50);
         let result = mempool.add_entry(coinbase, 0);
         assert!(matches!(result, Err(MempoolError::CoinbaseNotAllowed)));
-        assert_eq!(mempool.current_size(), 0);
+        assert_eq!(mempool.len(), 0);
 
         // Test 2: Accept valid transaction with proper fee
         let prev_tx_hash1 = Hash::hash(b"utxo1");
@@ -43,7 +43,7 @@ mod tests {
         let fee1 = 10; // 100 - 90 = 10
         let result1 = mempool.add_entry(tx1.clone(), fee1);
         assert!(result1.is_ok());
-        assert_eq!(mempool.current_size(), 1);
+        assert_eq!(mempool.len(), 1);
 
         // Test 3: Accept second valid transaction
         let prev_tx_hash2 = Hash::hash(b"utxo2");
@@ -65,7 +65,7 @@ mod tests {
         let fee2 = 20; // 100 - 80 = 20
         let result2 = mempool.add_entry(tx2, fee2);
         assert!(result2.is_ok());
-        assert_eq!(mempool.current_size(), 2);
+        assert_eq!(mempool.len(), 2);
         assert!(mempool.is_full());
 
         // Test 4: Reject when mempool is full with lower fee
@@ -88,7 +88,7 @@ mod tests {
         let fee3 = 5; // 100 - 95 = 5
         let result3 = mempool.add_entry(tx3, fee3);
         assert!(matches!(result3, Err(MempoolError::FeeTooLow { .. })));
-        assert_eq!(mempool.current_size(), 2);
+        assert_eq!(mempool.len(), 2);
 
         // Test 5: Accept transaction with higher fee, replacing lowest
         let prev_tx_hash4 = Hash::hash(b"utxo4");
@@ -110,7 +110,7 @@ mod tests {
         let fee4 = 50; // 100 - 50 = 50
         let result4 = mempool.add_entry(tx4.clone(), fee4);
         assert!(result4.is_ok());
-        assert_eq!(mempool.current_size(), 2); // Still 2, replaced lowest
+        assert_eq!(mempool.len(), 2); // Still 2, replaced lowest
 
         // Verify the transaction with lowest fee (tx1 with fee 10) was replaced
         let sorted = mempool.get_transactions_by_fee();
@@ -127,7 +127,7 @@ mod tests {
         // Initial state checks
         assert!(mempool.is_empty());
         assert!(!mempool.is_full());
-        assert_eq!(mempool.current_size(), 0);
+        assert_eq!(mempool.len(), 0);
 
         // Setup test accounts
         let alice_keypair = KeyPair::generate();
@@ -176,14 +176,14 @@ mod tests {
         assert_eq!(sorted_txs[1].outputs[0].amount, 90); // Lower fee second
 
         // Test: Remove specific transaction
-        assert_eq!(mempool.current_size(), 2);
+        assert_eq!(mempool.len(), 2);
         mempool.remove_entry(&tx1);
-        assert_eq!(mempool.current_size(), 1);
+        assert_eq!(mempool.len(), 1);
         assert!(!mempool.is_empty());
 
         // Test: Clear all transactions
         mempool.clear();
-        assert_eq!(mempool.current_size(), 0);
+        assert_eq!(mempool.len(), 0);
         assert!(mempool.is_empty());
     }
 }

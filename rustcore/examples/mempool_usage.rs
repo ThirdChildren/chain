@@ -19,7 +19,7 @@ fn main() {
     // 1. Create a mempool with default capacity (100 transactions)
     let mut mempool = Mempool::new();
     println!("Mempool created with capacity: {}", mempool.max_size);
-    println!("Current size: {}", mempool.current_size());
+    println!("Current size: {}", mempool.len());
     println!("");
 
     // 2. Create UTXO set for transaction validation
@@ -73,7 +73,7 @@ fn main() {
         }
         Err(e) => println!("  ✗ Failed to add: {:?}", e),
     }
-    println!("  Mempool size: {}\n", mempool.current_size());
+    println!("  Mempool size: {}\n", mempool.len());
 
     // 6. Try to add a coinbase transaction (should fail)
     println!("Test 2: Attempting to add coinbase transaction");
@@ -82,7 +82,7 @@ fn main() {
         Ok(_) => println!("  ✗ ERROR: Coinbase accepted (should be rejected)"),
         Err(e) => println!("  ✓ Correctly rejected: {:?}", e),
     }
-    println!("  Mempool size: {}\n", mempool.current_size());
+    println!("  Mempool size: {}\n", mempool.len());
 
     // 7. Create transaction with higher fee
     println!("Test 3: Adding transaction with higher fee (Alice → Charlie, 30 coins, fee 20)");
@@ -103,7 +103,7 @@ fn main() {
         }
         Err(e) => println!("  ✗ Failed to add: {:?}", e),
     }
-    println!("  Mempool size: {}\n", mempool.current_size());
+    println!("  Mempool size: {}\n", mempool.len());
 
     // 8. Get transactions sorted by fee (for mining)
     println!("Test 4: Retrieving transactions sorted by fee (highest first)");
@@ -184,20 +184,20 @@ fn main() {
         Ok(_) => println!("  ✓ High-fee transaction accepted, replaced lowest-fee transaction"),
         Err(e) => println!("  ✗ ERROR: High-fee transaction rejected: {:?}", e),
     }
-    println!("  Final mempool size: {}\n", small_mempool.current_size());
+    println!("  Final mempool size: {}\n", small_mempool.len());
 
     // 10. Remove transaction after it's mined
     println!("Test 6: Removing transaction from mempool (after mining)");
-    println!("  Before removal: {} transactions", mempool.current_size());
+    println!("  Before removal: {} transactions", mempool.len());
     mempool.remove_entry(&tx1);
-    println!("  After removal: {} transactions", mempool.current_size());
+    println!("  After removal: {} transactions", mempool.len());
     println!("");
 
     // 11. Clear all transactions
     println!("Test 7: Clearing all transactions");
-    println!("  Before clear: {} transactions", mempool.current_size());
+    println!("  Before clear: {} transactions", mempool.len());
     mempool.clear();
-    println!("  After clear: {} transactions", mempool.current_size());
+    println!("  After clear: {} transactions", mempool.len());
     println!("  Is empty: {}\n", mempool.is_empty());
 
     // 12. Demonstrate timestamp-based cleanup
@@ -221,15 +221,12 @@ fn main() {
     let bob_fee = bob_tx.calculate_fee(&utxo_set).unwrap();
     temp_mempool.add_entry(bob_tx, bob_fee).ok();
     println!("  Added 1 transaction");
-    println!("  Current size: {}", temp_mempool.current_size());
+    println!("  Current size: {}", temp_mempool.len());
 
     // Simulate old timestamp (1 hour ago in milliseconds)
     let one_hour_ago = Mempool::get_current_timestamp() - (60 * 60 * 1000);
     temp_mempool.remove_old_transactions(one_hour_ago);
-    println!(
-        "  After removing old transactions: {}",
-        temp_mempool.current_size()
-    );
+    println!("  After removing old transactions: {}", temp_mempool.len());
     println!("");
 
     // Summary
