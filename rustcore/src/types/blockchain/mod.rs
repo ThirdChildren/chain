@@ -5,6 +5,7 @@ pub use validator::ValidationError;
 use crate::BLOCK_REWARD;
 use crate::crypto::{Hash, PrivateKey, PublicKey};
 use crate::types::{Block, Mempool, Transaction, UTXOSet, UtxoRef};
+use log::debug;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -13,6 +14,7 @@ pub struct Blockchain {
     pub mempool: Mempool,
     pub utxo_set: UTXOSet,
     pub blocks: Vec<Block>,
+    pub pending_blocks: HashMap<Hash, HashSet<Block>>,
     pub block_by_hash: HashMap<Hash, usize>,
 }
 
@@ -24,6 +26,7 @@ impl Blockchain {
             mempool: Mempool::new(),
             utxo_set: UTXOSet::new(),
             blocks: vec![],
+            pending_blocks: HashMap::new(),
             block_by_hash: HashMap::new(),
         };
 
@@ -236,6 +239,49 @@ impl Blockchain {
         Ok(())
     }
 
+    pub fn try_attach_pending_blocks(&mut self) {
+        let current_block_hash = self.get_block_by_index(self.height()).unwrap().hash;
+        let next_block: Option<Block> = self
+            .pending_blocks
+            .get(&current_block_hash)
+            .unwrap_or(&HashSet::new())
+            .iter()
+            .filter(|b| b.index == self.current_index() + 1)
+            .min_by_key(|b| b.timestamp)
+            .cloned();
+
+        if let Some(block) = next_block {
+            debug!(
+                "Found valid candidate {}, adding to chain",
+                block.print_hash()
+            );
+
+            let discarded_block_count = self
+                .pending_blocks
+                .get(&current_block_hash)
+                .unwrap_or(&HashSet::new())
+                .iter()
+                .filter(|b| b.hash != block.hash)
+                .count();
+            if discarded_block_count > 0 {
+                debug!(
+                    "Discarded {} candidate blocks for the same previous block hash {}",
+                    discarded_block_count,
+                    block.print_previous_block_hash()
+                );
+            }
+
+            match self.add_block(block.clone()) {
+                Ok(_) => {
+                    debug!("Block successfully added to chain");
+                }
+                Err(e) => {
+                    debug!("Failed to add block to chain: {:?}", e);
+                }
+            }
+        }
+    }
+
     // ========== Query Methods ==========
 
     /// Gets a block by its hash
@@ -263,6 +309,10 @@ impl Blockchain {
     /// Gets the balance of an address
     pub fn get_balance(&self, address: &[u8; 20]) -> u64 {
         self.utxo_set.get_balance(address)
+    }
+
+    pub fn current_index(&self) -> u32 {
+        self.height() as u32
     }
 }
 

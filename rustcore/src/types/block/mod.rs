@@ -197,6 +197,14 @@ impl Block {
 
         Ok(())
     }
+
+    pub fn print_hash(&self) -> String {
+        format!("{:?}", self.hash)
+    }
+
+    pub fn print_previous_block_hash(&self) -> String {
+        format!("{:?}", self.prev_block_hash)
+    }
 }
 
 #[cfg(test)]

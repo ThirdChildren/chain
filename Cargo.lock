@@ -448,6 +448,7 @@ dependencies = [
  "ecdsa",
  "hex",
  "k256",
+ "log",
  "pqcrypto-dilithium",
  "pqcrypto-traits",
  "rand",

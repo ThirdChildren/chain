@@ -18,6 +18,7 @@ sha256 = ["dep:sha2"]
 
 [dependencies]
 hex = "0.4.3"
+log = "0.4"
 rand = "0.8"
 uint = "0.10.0"
 uuid = { version = "1.17.0", features = ["v4"] }
