@@ -374,4 +374,86 @@ mod tests {
         blockchain.submit_transaction(tx).unwrap();
         assert_eq!(blockchain.mempool.len(), 1);
     }
+
+    #[test]
+    fn test_try_attach_pending_blocks() {
+        let miner_keypair = KeyPair::generate();
+        let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
+
+        // Create genesis block (index 0)
+        let genesis_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let genesis_block = Block::new_signed(
+            0,
+            Hash::zero(),
+            Block::get_current_timestamp(),
+            vec![genesis_coinbase],
+            miner_keypair.public_key.clone(),
+            &miner_keypair.private_key,
+        );
+
+        let mut blockchain = Blockchain::new_blockchain("test".to_string(), genesis_block).unwrap();
+        assert_eq!(blockchain.height(), 1);
+
+        // Create block 1
+        let block1_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let block1 = Block::new_signed(
+            1,
+            blockchain.blocks[0].hash(),
+            Block::get_current_timestamp() + 1,
+            vec![block1_coinbase],
+            miner_keypair.public_key.clone(),
+            &miner_keypair.private_key,
+        );
+
+        // Add block 1 normally
+        blockchain.add_block(block1).unwrap();
+        assert_eq!(blockchain.height(), 2);
+
+        // Create block 2 (the missing link)
+        let block2_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let block2 = Block::new_signed(
+            2,
+            blockchain.blocks[1].hash(),
+            Block::get_current_timestamp() + 2,
+            vec![block2_coinbase],
+            miner_keypair.public_key.clone(),
+            &miner_keypair.private_key,
+        );
+
+        // Create block 3 with correct prev_hash pointing to block2
+        let block3_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let block3 = Block::new_signed(
+            3,
+            block2.hash(),
+            Block::get_current_timestamp() + 3,
+            vec![block3_coinbase],
+            miner_keypair.public_key.clone(),
+            &miner_keypair.private_key,
+        );
+
+        // Add block 3 to pending blocks (it can't be added yet because block 2 is missing)
+        blockchain.add_pending_block(block3.clone());
+        assert_eq!(blockchain.height(), 2); // Still at height 2
+        assert_eq!(blockchain.pending_blocks.len(), 1);
+
+        // Try to attach pending blocks - should fail because block 2 is missing
+        blockchain.try_attach_pending_blocks();
+        assert_eq!(blockchain.height(), 2); // Still at height 2
+        assert_eq!(blockchain.pending_blocks.len(), 1); // Block 3 still pending
+
+        // Now add block 2
+        blockchain.add_block(block2).unwrap();
+        assert_eq!(blockchain.height(), 3);
+
+        // Try to attach pending blocks - now block 3 should be attached
+        blockchain.try_attach_pending_blocks();
+        assert_eq!(blockchain.height(), 4); // Block 3 was attached!
+        assert_eq!(blockchain.pending_blocks.len(), 0); // No more pending blocks
+
+        // Verify the chain is correct
+        assert_eq!(blockchain.get_block_by_index(0).unwrap().index, 0);
+        assert_eq!(blockchain.get_block_by_index(1).unwrap().index, 1);
+        assert_eq!(blockchain.get_block_by_index(2).unwrap().index, 2);
+        assert_eq!(blockchain.get_block_by_index(3).unwrap().index, 3)
+    }
 }

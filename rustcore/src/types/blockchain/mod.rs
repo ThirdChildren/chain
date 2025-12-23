@@ -14,7 +14,7 @@ pub struct Blockchain {
     pub mempool: Mempool,
     pub utxo_set: UTXOSet,
     pub blocks: Vec<Block>,
-    pub pending_blocks: HashMap<Hash, HashSet<Block>>,
+    pub pending_blocks: HashMap<Hash, Vec<Block>>,
     pub block_by_hash: HashMap<Hash, usize>,
 }
 
@@ -239,45 +239,89 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Adds a block to the pending blocks set for future processing
+    pub fn add_pending_block(&mut self, block: Block) {
+        let prev_hash = block.prev_block_hash;
+        self.pending_blocks
+            .entry(prev_hash)
+            .or_insert_with(Vec::new)
+            .push(block);
+
+        debug!(
+            "Added block to pending blocks (prev_hash: {})",
+            hex::encode(prev_hash.as_bytes())
+        );
+    }
+
+    /// Tries to attach pending blocks that can now be added to the chain
     pub fn try_attach_pending_blocks(&mut self) {
-        let current_block_hash = self.get_block_by_index(self.height()).unwrap().hash;
-        let next_block: Option<Block> = self
-            .pending_blocks
-            .get(&current_block_hash)
-            .unwrap_or(&HashSet::new())
-            .iter()
-            .filter(|b| b.index == self.current_index() + 1)
-            .min_by_key(|b| b.timestamp)
-            .cloned();
+        loop {
+            // Get current block hash
+            let current_block_hash = match self.get_block_by_index(self.height() - 1) {
+                Some(block) => block.hash(),
+                None => return, // No blocks in chain
+            };
 
-        if let Some(block) = next_block {
-            debug!(
-                "Found valid candidate {}, adding to chain",
-                block.print_hash()
-            );
+            // Find the best candidate block
+            let next_block: Option<Block> =
+                self.pending_blocks
+                    .get(&current_block_hash)
+                    .and_then(|blocks| {
+                        blocks
+                            .iter()
+                            .filter(|b| b.index == self.current_index())
+                            .min_by_key(|b| b.timestamp)
+                            .cloned()
+                    });
 
-            let discarded_block_count = self
-                .pending_blocks
-                .get(&current_block_hash)
-                .unwrap_or(&HashSet::new())
-                .iter()
-                .filter(|b| b.hash != block.hash)
-                .count();
-            if discarded_block_count > 0 {
+            if let Some(block) = next_block {
+                let block_hash = block.hash();
                 debug!(
-                    "Discarded {} candidate blocks for the same previous block hash {}",
-                    discarded_block_count,
-                    block.print_previous_block_hash()
+                    "Found valid candidate {}, adding to chain",
+                    block.print_hash()
                 );
-            }
 
-            match self.add_block(block.clone()) {
-                Ok(_) => {
-                    debug!("Block successfully added to chain");
+                let discarded_block_count = self
+                    .pending_blocks
+                    .get(&current_block_hash)
+                    .map(|blocks| blocks.iter().filter(|b| b.hash() != block_hash).count())
+                    .unwrap_or(0);
+
+                if discarded_block_count > 0 {
+                    debug!(
+                        "Discarding {} candidate blocks for the same previous block hash {}",
+                        discarded_block_count,
+                        block.print_previous_block_hash()
+                    );
                 }
-                Err(e) => {
-                    debug!("Failed to add block to chain: {:?}", e);
+
+                // Try to add the block
+                match self.add_block(block.clone()) {
+                    Ok(_) => {
+                        debug!("Block successfully added to chain");
+
+                        // Remove all pending blocks for this prev_hash
+                        self.pending_blocks.remove(&current_block_hash);
+
+                        // Continue loop to try attaching more blocks
+                    }
+                    Err(e) => {
+                        debug!("Failed to add block to chain: {:?}", e);
+
+                        // Remove the invalid block from pending
+                        if let Some(blocks) = self.pending_blocks.get_mut(&current_block_hash) {
+                            blocks.retain(|b| b.hash() != block_hash);
+                            if blocks.is_empty() {
+                                self.pending_blocks.remove(&current_block_hash);
+                            }
+                        }
+
+                        break;
+                    }
                 }
+            } else {
+                // No more blocks to attach
+                break;
             }
         }
     }
