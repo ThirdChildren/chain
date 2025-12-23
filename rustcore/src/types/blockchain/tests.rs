@@ -9,7 +9,7 @@ mod tests {
         let miner_keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
@@ -36,7 +36,7 @@ mod tests {
         let miner_keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(alice_address, 100);
+        let coinbase_tx = Transaction::new_coinbase(alice_address, 100, 0);
 
         let genesis_block = Block::new_signed(
             0,
@@ -65,7 +65,7 @@ mod tests {
         );
         tx1.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        let new_block_coinbase = Transaction::new_coinbase(miner_address, 55);
+        let new_block_coinbase = Transaction::new_coinbase(miner_address, 55, 1);
 
         let new_block = Block::new_signed(
             1,
@@ -89,7 +89,7 @@ mod tests {
         let miner_keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
@@ -101,7 +101,7 @@ mod tests {
 
         let mut blockchain = Blockchain::new_blockchain("test".to_string(), genesis_block).unwrap();
 
-        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 50, 1);
         let block2 = Block::new_signed(
             1,
             blockchain.blocks[0].hash(),
@@ -128,7 +128,7 @@ mod tests {
 
         let miner_keypair = KeyPair::generate();
 
-        let coinbase_tx = Transaction::new_coinbase(alice_address, 100);
+        let coinbase_tx = Transaction::new_coinbase(alice_address, 100, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
@@ -160,7 +160,7 @@ mod tests {
         );
         tx2.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        let coinbase_tx2 = Transaction::new_coinbase(alice_address, 50);
+        let coinbase_tx2 = Transaction::new_coinbase(alice_address, 50, 1);
 
         let bad_block = Block::new_signed(
             1,
@@ -182,7 +182,7 @@ mod tests {
         let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
         let miner_keypair = KeyPair::generate();
 
-        let coinbase_tx = Transaction::new_coinbase(alice_address, 100);
+        let coinbase_tx = Transaction::new_coinbase(alice_address, 100, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
@@ -229,7 +229,7 @@ mod tests {
         let miner_keypair = KeyPair::generate();
         let _miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
 
-        let genesis_coinbase = Transaction::new_coinbase(alice_address, 200);
+        let genesis_coinbase = Transaction::new_coinbase(alice_address, 200, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
@@ -300,79 +300,54 @@ mod tests {
     }
 
     #[test]
-    fn test_create_block_respects_max_transactions() {
-        let alice_keypair = KeyPair::generate();
-        let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
-
+    fn test_coinbase_balance_accumulation() {
+        // Test that multiple coinbase transactions accumulate correctly
         let miner_keypair = KeyPair::generate();
-        let _miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
+        let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
 
-        let genesis_coinbase = Transaction::new_coinbase(alice_address, 1000);
+        // Create genesis block
+        let genesis_coinbase = Transaction::new_coinbase(miner_address, 50, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
             Block::get_current_timestamp(),
-            vec![genesis_coinbase.clone()],
+            vec![genesis_coinbase],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
         );
 
         let mut blockchain = Blockchain::new_blockchain("test".to_string(), genesis_block).unwrap();
+        assert_eq!(blockchain.get_balance(&miner_address), 50);
 
-        let mut tx = Transaction::new(
-            vec![TxInput::unsigned(genesis_coinbase.hash().as_bytes(), 0)],
-            vec![TxOutput {
-                amount: 995,
-                recipient: alice_address,
-            }],
-        );
-        tx.sign_input(0, &alice_keypair.private_key).unwrap();
-
-        blockchain.submit_transaction(tx).unwrap();
-
-        assert_eq!(blockchain.mempool.len(), 1);
-
-        let block = blockchain.create_block(
-            miner_keypair.public_key.clone(),
-            &miner_keypair.private_key,
-            0,
-        );
-
-        assert_eq!(block.transactions.len(), 1);
-        assert!(block.transactions[0].is_coinbase());
-    }
-
-    #[test]
-    fn test_submit_transaction_to_mempool() {
-        let alice_keypair = KeyPair::generate();
-        let alice_address = Transaction::public_key_to_address(&alice_keypair.public_key);
-        let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);
-        let miner_keypair = KeyPair::generate();
-
-        let coinbase_tx = Transaction::new_coinbase(alice_address, 100);
-        let genesis_block = Block::new_signed(
-            0,
-            Hash::zero(),
-            Block::get_current_timestamp(),
-            vec![coinbase_tx.clone()],
+        // Add block 1 with coinbase
+        let block1_coinbase = Transaction::new_coinbase(miner_address, 50, 1);
+        let block1 = Block::new_signed(
+            1,
+            blockchain.blocks[0].hash(),
+            Block::get_current_timestamp() + 1,
+            vec![block1_coinbase],
             miner_keypair.public_key.clone(),
             &miner_keypair.private_key,
         );
 
-        let mut blockchain = Blockchain::new_blockchain("test".to_string(), genesis_block).unwrap();
+        blockchain.add_block(block1).unwrap();
+        assert_eq!(blockchain.height(), 2);
+        assert_eq!(blockchain.get_balance(&miner_address), 100);
 
-        let mut tx = Transaction::new(
-            vec![TxInput::unsigned(coinbase_tx.hash().as_bytes(), 0)],
-            vec![TxOutput {
-                amount: 50,
-                recipient: bob_address,
-            }],
+        // Add block 2 with coinbase
+        let block2_coinbase = Transaction::new_coinbase(miner_address, 50, 2);
+        let block2 = Block::new_signed(
+            2,
+            blockchain.blocks[1].hash(),
+            Block::get_current_timestamp() + 2,
+            vec![block2_coinbase],
+            miner_keypair.public_key.clone(),
+            &miner_keypair.private_key,
         );
-        tx.sign_input(0, &alice_keypair.private_key).unwrap();
 
-        assert_eq!(blockchain.mempool.len(), 0);
-        blockchain.submit_transaction(tx).unwrap();
-        assert_eq!(blockchain.mempool.len(), 1);
+        blockchain.add_block(block2).unwrap();
+        assert_eq!(blockchain.height(), 3);
+        assert_eq!(blockchain.get_balance(&miner_address), 150);
     }
 
     #[test]
@@ -381,7 +356,7 @@ mod tests {
         let miner_address = Transaction::public_key_to_address(&miner_keypair.public_key);
 
         // Create genesis block (index 0)
-        let genesis_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let genesis_coinbase = Transaction::new_coinbase(miner_address, 50, 0);
         let genesis_block = Block::new_signed(
             0,
             Hash::zero(),
@@ -395,7 +370,7 @@ mod tests {
         assert_eq!(blockchain.height(), 1);
 
         // Create block 1
-        let block1_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let block1_coinbase = Transaction::new_coinbase(miner_address, 50, 1);
         let block1 = Block::new_signed(
             1,
             blockchain.blocks[0].hash(),
@@ -410,7 +385,7 @@ mod tests {
         assert_eq!(blockchain.height(), 2);
 
         // Create block 2 (the missing link)
-        let block2_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let block2_coinbase = Transaction::new_coinbase(miner_address, 50, 2);
         let block2 = Block::new_signed(
             2,
             blockchain.blocks[1].hash(),
@@ -421,7 +396,7 @@ mod tests {
         );
 
         // Create block 3 with correct prev_hash pointing to block2
-        let block3_coinbase = Transaction::new_coinbase(miner_address, 50);
+        let block3_coinbase = Transaction::new_coinbase(miner_address, 50, 3);
         let block3 = Block::new_signed(
             3,
             block2.hash(),

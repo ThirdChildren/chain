@@ -9,7 +9,7 @@ mod tests {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::zero();
 
         let block = Block::new(
@@ -31,7 +31,7 @@ mod tests {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::zero();
         let timestamp = Block::get_current_timestamp();
 
@@ -62,8 +62,8 @@ mod tests {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
 
-        let coinbase_tx1 = Transaction::new_coinbase(miner_address, 50);
-        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 100);
+        let coinbase_tx1 = Transaction::new_coinbase(miner_address, 50, 0);
+        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 100, 0);
         let prev_hash = Hash::zero();
 
         let block1 = Block::new(
@@ -92,7 +92,7 @@ mod tests {
     fn test_verify_hash() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
 
         let block = Block::new(
             0,
@@ -110,7 +110,7 @@ mod tests {
     fn test_verify_author_signature() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::zero();
 
         let block = Block::new(
@@ -126,7 +126,7 @@ mod tests {
         assert!(!block.verify_author_signature());
 
         // Create block with correct signature
-        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 50, 0);
         let mut temp_block = Block::new(
             0,
             prev_hash,
@@ -146,7 +146,7 @@ mod tests {
     fn test_has_correct_prev_hash() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::hash(b"previous_block");
 
         let block = Block::new(
@@ -167,7 +167,7 @@ mod tests {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let regular_tx = Transaction::new(
             vec![TxInput {
                 previous_tx_id: [1u8; 32],
@@ -250,8 +250,8 @@ mod tests {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
 
-        let coinbase_tx1 = Transaction::new_coinbase(miner_address, 50);
-        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx1 = Transaction::new_coinbase(miner_address, 50, 0);
+        let coinbase_tx2 = Transaction::new_coinbase(miner_address, 50, 0);
 
         let block = Block::new(
             1,
@@ -273,7 +273,7 @@ mod tests {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
 
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let regular_tx = Transaction::new(
             vec![TxInput {
                 previous_tx_id: [1u8; 32],
@@ -306,7 +306,7 @@ mod tests {
     fn test_validate_genesis_structure_valid() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
 
         let block = Block::new_signed(
             0,
@@ -324,7 +324,7 @@ mod tests {
     fn test_validate_genesis_structure_wrong_index() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
 
         let block = Block::new(
             1, // Should be 0!
@@ -345,7 +345,7 @@ mod tests {
     fn test_validate_genesis_structure_non_zero_prev_hash() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
 
         let block = Block::new(
             0,
@@ -366,7 +366,7 @@ mod tests {
     fn test_validate_structure_valid() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::hash(b"previous");
 
         let block = Block::new_signed(
@@ -385,7 +385,7 @@ mod tests {
     fn test_validate_structure_wrong_prev_hash() {
         let keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::hash(b"previous");
         let wrong_hash = Hash::hash(b"wrong");
 
@@ -409,7 +409,7 @@ mod tests {
         let keypair = KeyPair::generate();
         let wrong_keypair = KeyPair::generate();
         let miner_address = Transaction::public_key_to_address(&keypair.public_key);
-        let coinbase_tx = Transaction::new_coinbase(miner_address, 50);
+        let coinbase_tx = Transaction::new_coinbase(miner_address, 50, 0);
         let prev_hash = Hash::hash(b"previous");
 
         // Create block with wrong signature

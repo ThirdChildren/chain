@@ -32,7 +32,7 @@ fn main() {
     println!("");
 
     // Create Genesis Block with coinbase transaction for Alice
-    let genesis_coinbase = Transaction::new_coinbase(alice_address, 100);
+    let genesis_coinbase = Transaction::new_coinbase(alice_address, 100, 0);
 
     let genesis_block = Block::new_signed(
         0,
@@ -114,7 +114,7 @@ fn main() {
     println!("");
 
     // Create Block 1 with coinbase + transaction
-    let block1_coinbase = Transaction::new_coinbase(miner_address, 55); // 50 reward + 5 fee
+    let block1_coinbase = Transaction::new_coinbase(miner_address, 55, 0); // 50 reward + 5 fee
 
     let block_1 = Block::new_signed(
         1,
@@ -185,7 +185,7 @@ fn main() {
 
     // Test 1: Block with wrong prev_hash
     println!("Test 1: Block with wrong prev_hash");
-    let test_coinbase = Transaction::new_coinbase(miner_address, 50);
+    let test_coinbase = Transaction::new_coinbase(miner_address, 50, 0);
     let invalid_block_1 = Block::new_signed(
         2,
         Hash::zero(), // Wrong prev_hash!
@@ -214,7 +214,7 @@ fn main() {
     );
     bob_tx.sign_input(0, &bob_keypair.private_key).unwrap();
 
-    let dup_coinbase = Transaction::new_coinbase(miner_address, 50);
+    let dup_coinbase = Transaction::new_coinbase(miner_address, 50, 0);
     let invalid_block_2 = Block::new_signed(
         2,
         block_1_hash,
@@ -244,7 +244,7 @@ fn main() {
         .sign_input(0, &bob_keypair.private_key)
         .unwrap();
 
-    let ds_coinbase = Transaction::new_coinbase(miner_address, 50);
+    let ds_coinbase = Transaction::new_coinbase(miner_address, 50, 0);
     let invalid_block_3 = Block::new_signed(
         2,
         block_1_hash,
@@ -303,7 +303,7 @@ fn main() {
         .sign_input(0, &wrong_keypair.private_key)
         .unwrap();
 
-    let invalid_sig_coinbase = Transaction::new_coinbase(miner_address, 50);
+    let invalid_sig_coinbase = Transaction::new_coinbase(miner_address, 50, 0);
     let invalid_block_5 = Block::new_signed(
         2,
         block_1_hash,
@@ -339,7 +339,7 @@ fn main() {
         .sign_input(0, &alice_keypair.private_key)
         .unwrap();
 
-    let final_coinbase = Transaction::new_coinbase(miner_address, 55);
+    let final_coinbase = Transaction::new_coinbase(miner_address, 55, 0);
     let block_2 = Block::new_signed(
         2,
         block_1_hash,

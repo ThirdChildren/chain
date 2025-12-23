@@ -18,7 +18,7 @@ mod tests {
         let bob_address = [2u8; 20];
 
         // Test 1: Reject coinbase transactions
-        let coinbase = Transaction::new_coinbase(alice_address, 50);
+        let coinbase = Transaction::new_coinbase(alice_address, 50, 0);
         let result = mempool.add_entry(coinbase, 0);
         assert!(matches!(result, Err(MempoolError::CoinbaseNotAllowed)));
         assert_eq!(mempool.len(), 0);

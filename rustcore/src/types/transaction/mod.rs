@@ -40,17 +40,33 @@ impl Transaction {
     }
 
     /// Create a new coinbase transaction (mining reward)
-    pub fn new_coinbase(recipient: [u8; 20], amount: u64) -> Self {
+    /// The block_index is used to ensure uniqueness of the coinbase transaction
+    pub fn new_coinbase(recipient: [u8; 20], amount: u64, block_index: u32) -> Self {
+        // Create a unique "previous_tx_id" using the block index
+        // This ensures each coinbase has a unique hash
+        let mut coinbase_data = [0u8; 32];
+        coinbase_data[0..4].copy_from_slice(&block_index.to_le_bytes());
+
+        let coinbase_input = TxInput {
+            previous_tx_id: coinbase_data,
+            output_index: 0xFFFFFFFF, // Max u32 value indicates coinbase
+            signature: Signature::default(),
+            public_key: PublicKey::default(),
+        };
+
         let output = TxOutput { amount, recipient };
         Transaction {
-            inputs: vec![],
+            inputs: vec![coinbase_input],
             outputs: vec![output],
         }
     }
 
     /// Check if this is a coinbase transaction
+    /// A coinbase has exactly one input with output_index == 0xFFFFFFFF
     pub fn is_coinbase(&self) -> bool {
-        self.inputs.is_empty() && !self.outputs.is_empty()
+        self.inputs.len() == 1
+            && self.inputs[0].output_index == 0xFFFFFFFF
+            && !self.outputs.is_empty()
     }
 
     /// Serialization without external libraries

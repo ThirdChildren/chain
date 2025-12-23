@@ -146,15 +146,16 @@ impl Blockchain {
             .sum();
 
         // Create coinbase transaction (reward + fees)
+        let block_index = self.blocks.len() as u32;
         let miner_address = Transaction::public_key_to_address(&miner_public_key);
-        let coinbase = Transaction::new_coinbase(miner_address, BLOCK_REWARD + total_fees);
+        let coinbase =
+            Transaction::new_coinbase(miner_address, BLOCK_REWARD + total_fees, block_index);
 
         // Assemble all transactions (coinbase must be first)
         let mut all_transactions = vec![coinbase];
         all_transactions.extend(selected_transactions);
 
         // Determine block parameters
-        let block_index = self.blocks.len() as u32;
         let prev_hash = if self.is_empty() {
             Hash::zero()
         } else {

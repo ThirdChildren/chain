@@ -52,7 +52,7 @@ mod tests {
         let address = Transaction::public_key_to_address(&alice_keypair.public_key);
 
         // Add initial UTXO
-        let initial_tx = Transaction::new_coinbase(address, 100);
+        let initial_tx = Transaction::new_coinbase(address, 100, 0);
         utxo_set.apply_transaction(&initial_tx, 0).unwrap();
 
         let bob_address = Transaction::public_key_to_address(&KeyPair::generate().public_key);

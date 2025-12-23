@@ -77,7 +77,7 @@ fn main() {
 
     // 6. Try to add a coinbase transaction (should fail)
     println!("Test 2: Attempting to add coinbase transaction");
-    let coinbase = Transaction::new_coinbase(bob_address, 50);
+    let coinbase = Transaction::new_coinbase(bob_address, 50, 0);
     match mempool.add_entry(coinbase, 0) {
         Ok(_) => println!("  ✗ ERROR: Coinbase accepted (should be rejected)"),
         Err(e) => println!("  ✓ Correctly rejected: {:?}", e),
